@@ -7,6 +7,7 @@ import {
   Animated,
   ScrollView,
   SafeAreaView,
+  ActivityIndicator,
 } from "react-native";
 import { router } from "expo-router";
 import { useConversation } from "@elevenlabs/react-native";
@@ -17,31 +18,38 @@ const AGENT_ID = "agent_4601kjkqjm0de5z86ea0gmpxk1qw";
 
 type Message = { role: "user" | "agent"; text: string };
 
+type Phase = "intro" | "conversation" | "reviewing" | "saving";
+
+type ExtractedProfile = {
+  age_range: string | null;
+  life_areas: string[];
+  bio: string;
+  key_topics: string[];
+  wisdom_summary: string;
+};
+
 export default function ElderVoiceOnboarding() {
   const { user } = useAuth();
   const scrollRef = useRef<ScrollView>(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const pulseRef = useRef<Animated.CompositeAnimation | null>(null);
 
-  const [hasStarted, setHasStarted] = useState(false);
+  const [phase, setPhase] = useState<Phase>("intro");
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [paused, setPaused] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [extractedProfile, setExtractedProfile] =
+    useState<ExtractedProfile | null>(null);
 
   const conversation = useConversation({
     clientTools: {
-      complete_onboarding: async (params: unknown): Promise<string> => {
-        const p = params as {
-          age_range?: string;
-          life_areas?: string[];
-          bio?: string;
-        };
-        await finishOnboarding(p.age_range, p.life_areas, p.bio);
-        return "ok";
+      complete_onboarding: async (parameters: any): Promise<string> => {
+        try {
+          await conversation.endSession();
+        } catch (_) {}
+        await enterReview();
+        return "done";
       },
-    },
     },
     onModeChange: ({ mode }: { mode: "speaking" | "listening" }) => {
       setIsSpeaking(mode === "speaking");
@@ -56,7 +64,6 @@ export default function ElderVoiceOnboarding() {
       if (message) setMessages((prev) => [...prev, { role, text: message }]);
     },
     onConnect: ({ conversationId: cid }: { conversationId: string }) => {
-      setConversationId(cid);
       console.log("[elder-onboarding] connected", cid);
       setPaused(false);
     },
@@ -106,36 +113,76 @@ export default function ElderVoiceOnboarding() {
   }, []);
 
   async function handleStartSession() {
-    setHasStarted(true);
+    setPhase("conversation");
     await conversation.startSession({ agentId: AGENT_ID });
   }
 
-  async function finishOnboarding(
-    age_range?: string,
-    life_areas?: string[],
-    bio?: string,
-  ) {
-    if (!user || saving) return;
-    setSaving(true);
+  async function enterReview() {
+    setPhase("reviewing");
+    const { data, error } = await supabase.functions.invoke(
+      "elder-onboarding-extract",
+      { body: { messages } },
+    );
+    if (error || !data) {
+      await finishOnboarding(null, null, [], "", [], "");
+      return;
+    }
+    setExtractedProfile(data as ExtractedProfile);
+    // phase stays "reviewing" but now extractedProfile is set → shows review UI
+  }
 
-    const { error } = await supabase.functions.invoke("process-elder-onboarding", {
-      body: {
-        conversationId,
-        userId: user.id,
+  async function finishOnboarding(
+    rawTranscript: typeof messages | null,
+    age_range: string | null,
+    life_areas: string[],
+    bio: string,
+    key_topics: string[],
+    wisdom_summary: string,
+  ) {
+    if (!user) return;
+    setPhase("saving");
+    const { error } = await supabase.from("elder_profiles").upsert(
+      {
+        user_id: user.id,
+        raw_transcript: rawTranscript,
         age_range: age_range ?? null,
         life_areas: life_areas ?? [],
+        bio: bio ?? "",
+        key_topics: key_topics ?? [],
+        wisdom_summary: wisdom_summary ?? "",
+        onboarding_done: true,
+        is_seeded: false,
       },
-    });
-
-    setSaving(false);
+      { onConflict: "user_id" },
+    );
     if (!error) router.replace("/(elder)/home");
+    else setPhase("reviewing");
   }
 
   async function handleDone() {
     try {
       await conversation.endSession();
     } catch (_) {}
-    finishOnboarding();
+    await enterReview();
+  }
+
+  async function handleConfirm() {
+    if (!extractedProfile) return;
+    await finishOnboarding(
+      messages,
+      extractedProfile.age_range,
+      extractedProfile.life_areas,
+      extractedProfile.bio,
+      extractedProfile.key_topics,
+      extractedProfile.wisdom_summary,
+    );
+  }
+
+  async function handleStartOver() {
+    setExtractedProfile(null);
+    setMessages([]);
+    setPaused(false);
+    setPhase("intro");
   }
 
   async function handleDevSkip() {
@@ -143,9 +190,12 @@ export default function ElderVoiceOnboarding() {
       await conversation.endSession();
     } catch (_) {}
     await finishOnboarding(
+      messages,
       "60s",
       ["farming", "entrepreneurship", "land-management"],
       "Leo is a dev turn farmer who scaled his farm from a small plot to 300 acres. He brings decades of hands-on experience in agriculture, business scaling, and rural entrepreneurship.",
+      ["scaling farms", "rural entrepreneurship", "land management"],
+      "Hands-on experience beats theory when scaling any land-based business.",
     );
   }
 
@@ -170,7 +220,14 @@ export default function ElderVoiceOnboarding() {
     try {
       await conversation.endSession();
     } catch (_) {}
-    router.replace({ pathname: "/", params: { noredirect: "1" } });
+    if (phase === "reviewing") {
+      setExtractedProfile(null);
+      setMessages([]);
+      setPaused(false);
+      setPhase("intro");
+    } else {
+      router.replace({ pathname: "/", params: { noredirect: "1" } });
+    }
   }
 
   const statusLabel = paused
@@ -181,7 +238,8 @@ export default function ElderVoiceOnboarding() {
         ? "Speaking..."
         : "Listening...";
 
-  if (!hasStarted) {
+  // Intro phase
+  if (phase === "intro") {
     return (
       <SafeAreaView style={styles.safe}>
         <View style={styles.introContainer}>
@@ -233,6 +291,109 @@ export default function ElderVoiceOnboarding() {
     );
   }
 
+  // Review phase
+  if (phase === "reviewing") {
+    return (
+      <SafeAreaView style={styles.safe}>
+        {extractedProfile === null ? (
+          // Loading state
+          <View style={styles.reviewLoadingContainer}>
+            <ActivityIndicator color="#111" size="large" />
+            <Text style={styles.reviewLoadingText}>
+              Reviewing your conversation...
+            </Text>
+          </View>
+        ) : (
+          // Review UI
+          <ScrollView
+            style={styles.reviewScroll}
+            contentContainerStyle={styles.reviewContainer}
+            showsVerticalScrollIndicator={false}
+          >
+            <Text style={styles.reviewTitle}>Here's what we captured</Text>
+
+            {extractedProfile.bio ? (
+              <View style={styles.reviewSection}>
+                <Text style={styles.reviewLabel}>About You</Text>
+                <View style={styles.bioCard}>
+                  <Text style={styles.bio}>{extractedProfile.bio}</Text>
+                </View>
+              </View>
+            ) : null}
+
+            {extractedProfile.life_areas.length > 0 ? (
+              <View style={styles.reviewSection}>
+                <Text style={styles.reviewLabel}>Life Areas</Text>
+                <View style={styles.chipRow}>
+                  {extractedProfile.life_areas.map((area) => (
+                    <View key={area} style={styles.chip}>
+                      <Text style={styles.chipText}>{area}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            ) : null}
+
+            {extractedProfile.key_topics.length > 0 ? (
+              <View style={styles.reviewSection}>
+                <Text style={styles.reviewLabel}>Key Topics</Text>
+                <View style={styles.chipRow}>
+                  {extractedProfile.key_topics.map((topic) => (
+                    <View key={topic} style={styles.chip}>
+                      <Text style={styles.chipText}>{topic}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            ) : null}
+
+            {extractedProfile.wisdom_summary ? (
+              <View style={styles.reviewSection}>
+                <Text style={styles.reviewLabel}>Your Wisdom</Text>
+                <View style={styles.bioCard}>
+                  <Text style={styles.bio}>
+                    {extractedProfile.wisdom_summary}
+                  </Text>
+                </View>
+              </View>
+            ) : null}
+
+            {extractedProfile.age_range ? (
+              <View style={styles.reviewSection}>
+                <Text style={styles.reviewLabel}>Age</Text>
+                <Text style={styles.reviewValue}>
+                  {extractedProfile.age_range}
+                </Text>
+              </View>
+            ) : null}
+
+            <View style={styles.reviewControls}>
+              <Pressable style={styles.doneBtn} onPress={handleConfirm}>
+                <Text style={styles.doneBtnText}>Looks Good →</Text>
+              </Pressable>
+              <Pressable style={styles.repeatBtn} onPress={handleStartOver}>
+                <Text style={styles.repeatBtnText}>Start Over</Text>
+              </Pressable>
+            </View>
+          </ScrollView>
+        )}
+      </SafeAreaView>
+    );
+  }
+
+  // Saving phase (brief overlay while DB write completes)
+  if (phase === "saving") {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <View style={styles.reviewLoadingContainer}>
+          <ActivityIndicator color="#111" size="large" />
+          <Text style={styles.reviewLoadingText}>Saving your profile...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Conversation phase
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.header}>
@@ -321,14 +482,8 @@ export default function ElderVoiceOnboarding() {
         >
           <Text style={styles.repeatBtnText}>↺ Repeat</Text>
         </Pressable>
-        <Pressable
-          style={[styles.doneBtn, saving && styles.btnDisabled]}
-          onPress={handleDone}
-          disabled={saving}
-        >
-          <Text style={styles.doneBtnText}>
-            {saving ? "Saving..." : "I'm Done"}
-          </Text>
+        <Pressable style={styles.doneBtn} onPress={handleDone}>
+          <Text style={styles.doneBtnText}>I'm Done</Text>
         </Pressable>
       </View>
     </SafeAreaView>
@@ -537,4 +692,80 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   devBtnText: { fontFamily: "Orbit_400Regular", fontSize: 11, color: "#AAA" },
+
+  // Review phase styles
+  reviewLoadingContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 20,
+  },
+  reviewLoadingText: {
+    fontFamily: "Orbit_400Regular",
+    fontSize: 20,
+    fontWeight: "900",
+    color: "#111",
+  },
+  reviewScroll: { flex: 1 },
+  reviewContainer: {
+    paddingTop: 60,
+    paddingHorizontal: 24,
+    paddingBottom: 60,
+    gap: 28,
+  },
+  reviewTitle: {
+    fontFamily: "Orbit_400Regular",
+    fontSize: 38,
+    fontWeight: "900",
+    color: "#111",
+    lineHeight: 46,
+    letterSpacing: -0.5,
+    marginBottom: 8,
+  },
+  reviewSection: { gap: 10 },
+  reviewLabel: {
+    fontFamily: "Orbit_400Regular",
+    fontSize: 14,
+    color: "#111",
+    fontWeight: "900",
+    letterSpacing: 2,
+    textTransform: "uppercase",
+  },
+  reviewValue: {
+    fontFamily: "Orbit_400Regular",
+    fontSize: 28,
+    color: "#111",
+    fontWeight: "900",
+  },
+  bioCard: {
+    backgroundColor: "#F0F2E8",
+    padding: 24,
+    gap: 10,
+    borderWidth: 2,
+    borderColor: "#111",
+  },
+  bio: {
+    fontFamily: "Orbit_400Regular",
+    fontSize: 20,
+    color: "#111",
+    fontWeight: "900",
+    lineHeight: 32,
+  },
+  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  chip: {
+    borderWidth: 2,
+    borderColor: "#111",
+    paddingVertical: 8,
+    paddingHorizontal: 18,
+  },
+  chipText: {
+    fontFamily: "Orbit_400Regular",
+    fontSize: 18,
+    color: "#111",
+    fontWeight: "900",
+  },
+  reviewControls: {
+    marginTop: 8,
+    gap: 14,
+  },
 });
