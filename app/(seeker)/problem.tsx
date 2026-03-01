@@ -9,6 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Alert,
 } from "react-native";
 import { router } from "expo-router";
 import { useAuth } from "../../lib/auth";
@@ -153,6 +154,7 @@ export default function ProblemScreen() {
       router.replace("/(seeker)/(tabs)/matches");
     } catch (err) {
       console.error("Match failed:", err);
+      Alert.alert("Error", String(err));
     } finally {
       setLoading(false);
     }
