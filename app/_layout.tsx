@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { AuthProvider, useAuth } from "../lib/auth";
 import { supabase } from "../lib/supabase";
 import { useLocalSearchParams } from "expo-router";
+import { ElevenLabsProvider } from "@elevenlabs/react-native";
 
 type WisdomRole = "elder" | "seeker" | null;
 
@@ -84,9 +85,11 @@ export default function RootLayout() {
   if (!fontsLoaded) return null;
 
   return (
-    <AuthProvider>
-      <RootNavigator />
-    </AuthProvider>
+    <ElevenLabsProvider>
+      <AuthProvider>
+        <RootNavigator />
+      </AuthProvider>
+    </ElevenLabsProvider>
   );
 }
 
