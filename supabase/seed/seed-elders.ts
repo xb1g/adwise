@@ -2,6 +2,9 @@
 // Run with: npx ts-node supabase/seed/seed-elders.ts
 // Or paste directly into Supabase SQL editor as an INSERT statement
 
+import * as dotenv from "dotenv";
+dotenv.config({ path: ".env.local" });
+
 import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
