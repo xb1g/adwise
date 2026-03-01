@@ -15,43 +15,6 @@ import { useAuth } from "../../lib/auth";
 import { matchElders, MatchResult } from "../../lib/ai";
 import { supabase } from "../../lib/supabase";
 
-const MOCK_MATCHES: MatchResult[] = [
-  {
-    elder_id: "mock-1",
-    story_id: "s-1",
-    rank: 1,
-    match_reason:
-      "Maria immigrated alone at 35 and rebuilt her career from scratch — exactly the fear of starting over you're describing.",
-  },
-  {
-    elder_id: "mock-2",
-    story_id: "s-2",
-    rank: 2,
-    match_reason:
-      "Robert founded three companies and lost two — he knows what it costs to bet on yourself.",
-  },
-  {
-    elder_id: "mock-3",
-    story_id: "s-3",
-    rank: 3,
-    match_reason:
-      "James spent 35 years in the wrong career before leaving — he understands the pull between safety and calling.",
-  },
-  {
-    elder_id: "mock-4",
-    story_id: "s-4",
-    rank: 4,
-    match_reason:
-      "Carlos lost his business in 2008 and rebuilt — he's walked the exact path you're afraid of.",
-  },
-  {
-    elder_id: "mock-5",
-    story_id: "s-5",
-    rank: 5,
-    match_reason:
-      "Linda reinvented her life at 55 — she knows what it means to choose yourself when it's terrifying.",
-  },
-];
 
 const PROBLEM_PROMPTS = [
   "Career confusion",
@@ -83,7 +46,6 @@ export default function ProblemScreen() {
     try {
       let userId = user?.id;
 
-      // Sign up here if not yet authenticated
       if (!userId) {
         const { data, error } = await supabase.auth.signInAnonymously();
         if (error) throw error;
@@ -94,7 +56,6 @@ export default function ProblemScreen() {
             .upsert({ user_id: userId, role: "seeker", name: name.trim() }, { onConflict: "user_id" });
         }
       } else {
-        // Already signed in — just update the name
         await supabase
           .from("wisdom_users")
           .update({ name: name.trim() })
@@ -103,11 +64,7 @@ export default function ProblemScreen() {
 
       let matches: MatchResult[];
 
-      // Swap to real API once Dev 3 deploys match function:
-      // matches = await matchElders(problemText, user?.id);
-      // For now, use mock:
-      await new Promise((r) => setTimeout(r, 1500));
-      matches = MOCK_MATCHES;
+      matches = await matchElders(problemText, user?.id ?? undefined);
 
       router.push({
         pathname: "/(seeker)/matches",
@@ -123,11 +80,6 @@ export default function ProblemScreen() {
     }
   }
 
-  async function handleSignOut() {
-    await supabase.auth.signOut();
-    router.replace("/");
-  }
-
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
@@ -137,8 +89,8 @@ export default function ProblemScreen() {
         style={styles.scroll}
         contentContainerStyle={styles.container}
       >
-        <Pressable style={styles.signOutBtn} onPress={handleSignOut}>
-          <Text style={styles.signOutText}>Sign out</Text>
+        <Pressable style={styles.backBtn} onPress={() => router.replace("/")} hitSlop={12}>
+          <Text style={styles.backText}>← Back</Text>
         </Pressable>
 
         <Text style={styles.title}>What problem are you facing right now?</Text>
@@ -211,12 +163,11 @@ export default function ProblemScreen() {
 const styles = StyleSheet.create({
   scroll: { flex: 1, backgroundColor: "#FDFFF5" },
   container: { paddingTop: 80, paddingHorizontal: 24, paddingBottom: 48 },
-  signOutBtn: { position: "absolute", top: 60, right: 24, zIndex: 10 },
-  signOutText: {
+  backBtn: { position: "absolute", top: 60, left: 24, zIndex: 10, padding: 4 },
+  backText: {
     fontFamily: "Orbit_400Regular",
-    fontSize: 12,
-    color: "#111",
-    opacity: 0.5,
+    fontSize: 16,
+    color: "#666",
   },
   title: {
     fontSize: 34,
