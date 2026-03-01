@@ -42,6 +42,7 @@ export default function ElderVoiceOnboarding() {
   const [extractedProfile, setExtractedProfile] =
     useState<ExtractedProfile | null>(null);
   const [extractionFailed, setExtractionFailed] = useState(false);
+  const [devGenerating, setDevGenerating] = useState(false);
 
   const conversation = useConversation({
     clientTools: {
@@ -190,18 +191,28 @@ export default function ElderVoiceOnboarding() {
     setPhase("intro");
   }
 
-  async function handleDevSkip() {
+  async function handleDevGenerate() {
+    setDevGenerating(true);
     try {
-      await conversation.endSession();
-    } catch (_) {}
-    await finishOnboarding(
-      messages,
-      "60s",
-      ["farming", "entrepreneurship", "land-management"],
-      "Leo is a dev turn farmer who scaled his farm from a small plot to 300 acres. He brings decades of hands-on experience in agriculture, business scaling, and rural entrepreneurship.",
-      ["scaling farms", "rural entrepreneurship", "land management"],
-      "Hands-on experience beats theory when scaling any land-based business.",
-    );
+      const { data, error } = await supabase.functions.invoke("dev-generate-elder", {});
+      if (error || !data) throw new Error("generation failed");
+      // Populate fake messages so the review looks realistic
+      messagesRef.current = data.fake_messages ?? [];
+      setMessages(data.fake_messages ?? []);
+      // Jump straight to review with the generated profile
+      setExtractedProfile({
+        age_range: data.age_range,
+        life_areas: data.life_areas,
+        bio: data.bio,
+        key_topics: data.key_topics,
+        wisdom_summary: data.wisdom_summary,
+      });
+      setPhase("reviewing");
+    } catch {
+      // silently fail - just leave on intro
+    } finally {
+      setDevGenerating(false);
+    }
   }
 
   function handleRepeat() {
@@ -295,6 +306,16 @@ export default function ElderVoiceOnboarding() {
                 </Text>
               </View>
             </View>
+
+            <Pressable
+              style={[styles.devBtn, devGenerating && { opacity: 0.5 }, { marginTop: 32, alignSelf: "center" }]}
+              onPress={handleDevGenerate}
+              disabled={devGenerating}
+            >
+              <Text style={styles.devBtnText}>
+                {devGenerating ? "generating..." : "dev: generate profile"}
+              </Text>
+            </Pressable>
           </View>
         </View>
       </SafeAreaView>
@@ -491,10 +512,6 @@ export default function ElderVoiceOnboarding() {
           </View>
         ))}
       </ScrollView>
-
-      <Pressable style={styles.devBtn} onPress={handleDevSkip}>
-        <Text style={styles.devBtnText}>dev: skip as Leo</Text>
-      </Pressable>
 
       <View style={styles.controls}>
         <Pressable
