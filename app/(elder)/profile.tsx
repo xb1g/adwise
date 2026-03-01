@@ -21,7 +21,7 @@ type ElderProfile = {
 };
 
 export default function ElderProfile() {
-  const { user } = useAuth();
+  const { user, refreshProfile } = useAuth();
   const [profile, setProfile] = useState<ElderProfile | null>(null);
   const [story, setStory] = useState<Story | null>(null);
   const [loading, setLoading] = useState(true);
@@ -54,6 +54,13 @@ export default function ElderProfile() {
     setLoading(false);
   }
 
+  async function handleDevReset() {
+    if (!user) return;
+    await supabase.from("user_profiles").delete().eq("user_id", user.id);
+    await supabase.from("wisdom_users").delete().eq("user_id", user.id);
+    await refreshProfile();
+  }
+
   if (loading) {
     return (
       <View style={styles.center}>
@@ -72,6 +79,9 @@ export default function ElderProfile() {
   if (!story) {
     return (
       <View style={styles.container}>
+        <Pressable style={styles.devResetBtn} onPress={handleDevReset}>
+          <Text style={styles.devResetText}>reset (dev)</Text>
+        </Pressable>
         <Text style={styles.title}>Welcome, elder.</Text>
         <Text style={styles.subtitle}>Your profile is ready. Now record your story.</Text>
         <Pressable style={styles.btn} onPress={() => router.push("/(elder)/record")}>
@@ -128,4 +138,6 @@ const styles = StyleSheet.create({
   btnText: { color: "#FDFFF5", fontFamily: "Orbit_400Regular", fontSize: 16, fontWeight: "700" },
   recordAgainBtn: { borderWidth: 1.5, borderColor: "#111", paddingVertical: 14, alignItems: "center", marginTop: 32 },
   recordAgainText: { fontFamily: "Orbit_400Regular", fontSize: 14, color: "#111" },
+  devResetBtn: { position: "absolute", top: 52, right: 20, zIndex: 10, paddingVertical: 4, paddingHorizontal: 10, borderWidth: 1, borderColor: "#CCC" },
+  devResetText: { fontSize: 11, fontFamily: "Orbit_400Regular", color: "#999" },
 });
