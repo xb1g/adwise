@@ -106,6 +106,7 @@ export default function MatchesScreen() {
                 ageRange: card.age_range,
                 lifeAreas: JSON.stringify(card.life_areas),
                 previewText: card.preview_text,
+                problemText: problem,
               },
             })
           }
