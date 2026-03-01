@@ -22,70 +22,11 @@ type ElderCard = {
   preview_text: string;
 };
 
-const MOCK_ELDERS: Record<string, Partial<ElderCard>> = {
-  "mock-1": {
-    bio: "Moved from the Philippines at 35 with $200. Became a registered nurse, raised three kids alone.",
-    age_range: "60s",
-    life_areas: ["immigration", "career", "family"],
-    preview_text:
-      "Left everything behind at 35 to start over in a new country — here's what she learned.",
-  },
-  "mock-2": {
-    bio: "Founded three companies — two failed. Spent five years in depression before finding purpose.",
-    age_range: "70s",
-    life_areas: ["startup", "failure", "reinvention"],
-    preview_text:
-      "Lost two companies, a marriage, and his savings — then built something that mattered.",
-  },
-  "mock-3": {
-    bio: "Spent 35 years in finance, then quit at 58 to write poetry — the dream he abandoned at 22.",
-    age_range: "60s",
-    life_areas: ["identity", "career", "immigration"],
-    preview_text:
-      "Spent 35 years in the wrong life — and had the courage to change it at 58.",
-  },
-  "mock-4": {
-    bio: "Lost his construction business in 2008, went bankrupt at 55, rebuilt to employ 30 people.",
-    age_range: "70s",
-    life_areas: ["financial-recovery", "career", "family"],
-    preview_text: "Lost everything in 2008 at 55 and rebuilt from zero — twice.",
-  },
-  "mock-5": {
-    bio: "Stayed in a difficult marriage for 28 years, rebuilt from scratch at 55.",
-    age_range: "60s",
-    life_areas: ["marriage", "divorce", "reinvention"],
-    preview_text: "Left a 28-year marriage at 55 and discovered who she actually was.",
-  },
-};
-
-const MOCK_MATCHES = [
-  {
-    elder_id: "mock-3",
-    story_id: "story-3",
-    rank: 1,
-    match_reason:
-      "She rebuilt her identity from scratch after decades in the wrong career — exactly what you're navigating.",
-  },
-  {
-    elder_id: "mock-2",
-    story_id: "story-2",
-    rank: 2,
-    match_reason:
-      "Lost two companies and a marriage, then found purpose — he knows what real reinvention costs.",
-  },
-  {
-    elder_id: "mock-1",
-    story_id: "story-1",
-    rank: 3,
-    match_reason:
-      "Started over in a new country with nothing — she understands building identity from zero.",
-  },
-];
-
 export default function SeekerMatchesTab() {
   const { user } = useAuth();
   const [cards, setCards] = useState<ElderCard[]>([]);
   const [subtitle, setSubtitle] = useState<string>("");
+  const [problemText, setProblemText] = useState<string>("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -96,56 +37,61 @@ export default function SeekerMatchesTab() {
   async function loadData() {
     setLoading(true);
 
-    // Load seeker problem / categories for subtitle
-    const { data: seekerProfile } = await supabase
-      .from("seeker_profiles")
-      .select("categories, problem_text")
-      .eq("user_id", user!.id)
-      .single();
+    // Fetch the latest match row for this seeker
+    const { data: latestMatch } = await supabase
+      .from("matches")
+      .select("problem_text, result")
+      .eq("seeker_id", user!.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-    if (seekerProfile?.categories?.length) {
-      setSubtitle(seekerProfile.categories.slice(0, 2).join(", "));
+    if (!latestMatch) {
+      setCards([]);
+      setLoading(false);
+      return;
     }
 
-    // Build cards from mock matches + mock elder data
-    const realElderIds = MOCK_MATCHES.map((m) => m.elder_id).filter(
-      (id) => !id.startsWith("mock-")
-    );
+    // Set subtitle from the problem text
+    const problem = latestMatch.problem_text ?? "";
+    setProblemText(problem);
+    setSubtitle(problem.length > 60 ? problem.slice(0, 60) + "..." : problem);
 
-    let enriched: ElderCard[];
+    // Parse match results from JSONB
+    const matchResults = latestMatch.result as Array<{
+      elder_id: string;
+      story_id: string;
+      rank: number;
+      match_reason: string;
+    }>;
 
-    if (realElderIds.length > 0) {
-      const { data: profiles } = await supabase
-        .from("elder_profiles")
-        .select("id, bio, age_range, life_areas")
-        .in("id", realElderIds);
-
-      const { data: stories } = await supabase
-        .from("stories")
-        .select("elder_id, preview_text")
-        .in("elder_id", realElderIds)
-        .eq("status", "published");
-
-      enriched = MOCK_MATCHES.map((m) => {
-        const profile = profiles?.find((p) => p.id === m.elder_id);
-        const story = stories?.find((s) => s.elder_id === m.elder_id);
-        return {
-          ...m,
-          bio: profile?.bio ?? "",
-          age_range: profile?.age_range ?? "",
-          life_areas: profile?.life_areas ?? [],
-          preview_text: story?.preview_text ?? "",
-        };
-      });
-    } else {
-      enriched = MOCK_MATCHES.map((m) => ({
-        ...m,
-        bio: MOCK_ELDERS[m.elder_id]?.bio ?? "",
-        age_range: MOCK_ELDERS[m.elder_id]?.age_range ?? "",
-        life_areas: MOCK_ELDERS[m.elder_id]?.life_areas ?? [],
-        preview_text: MOCK_ELDERS[m.elder_id]?.preview_text ?? "",
-      }));
+    if (!matchResults || matchResults.length === 0) {
+      setCards([]);
+      setLoading(false);
+      return;
     }
+
+    const elderIds = matchResults.map((m) => m.elder_id);
+
+    const { data: profiles } = await supabase
+      .from("elder_profiles")
+      .select("id, bio, age_range, life_areas")
+      .in("id", elderIds);
+
+    const { data: stories } = await supabase
+      .from("stories")
+      .select("elder_id, preview_text")
+      .in("elder_id", elderIds)
+      .eq("status", "published");
+
+    const enriched = matchResults.map((m) => ({
+      ...m,
+      bio: profiles?.find((p) => p.id === m.elder_id)?.bio ?? "",
+      age_range: profiles?.find((p) => p.id === m.elder_id)?.age_range ?? "",
+      life_areas: profiles?.find((p) => p.id === m.elder_id)?.life_areas ?? [],
+      preview_text:
+        stories?.find((s) => s.elder_id === m.elder_id)?.preview_text ?? "",
+    }));
 
     setCards(enriched);
     setLoading(false);
@@ -155,6 +101,23 @@ export default function SeekerMatchesTab() {
     return (
       <View style={styles.center}>
         <ActivityIndicator color="#111" size="large" />
+      </View>
+    );
+  }
+
+  if (!loading && cards.length === 0) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.emptyTitle}>No matches yet</Text>
+        <Text style={styles.emptyText}>
+          Describe your situation to find elders who've been there.
+        </Text>
+        <Pressable
+          style={styles.emptyBtn}
+          onPress={() => router.push("/(seeker)/problem")}
+        >
+          <Text style={styles.emptyBtnText}>Find matches</Text>
+        </Pressable>
       </View>
     );
   }
@@ -183,6 +146,7 @@ export default function SeekerMatchesTab() {
                   ageRange: card.age_range,
                   lifeAreas: JSON.stringify(card.life_areas),
                   previewText: card.preview_text,
+                  problemText: problemText,
                 },
               })
             }
@@ -362,6 +326,35 @@ const styles = StyleSheet.create({
   newProblemText: {
     fontFamily: "Orbit_400Regular",
     fontSize: 14,
+    color: "#111",
+    fontWeight: "700",
+  },
+  emptyTitle: {
+    fontFamily: "Orbit_400Regular",
+    fontSize: 22,
+    color: "#111",
+    marginBottom: 8,
+  },
+  emptyText: {
+    fontFamily: "Orbit_400Regular",
+    fontSize: 14,
+    color: "#666",
+    textAlign: "center",
+    lineHeight: 22,
+    paddingHorizontal: 32,
+    marginBottom: 24,
+  },
+  emptyBtn: {
+    backgroundColor: "#BFFF00",
+    paddingVertical: 14,
+    paddingHorizontal: 28,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: "#111",
+  },
+  emptyBtnText: {
+    fontFamily: "Orbit_400Regular",
+    fontSize: 15,
     color: "#111",
     fontWeight: "700",
   },

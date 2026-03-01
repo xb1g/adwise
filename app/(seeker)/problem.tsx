@@ -79,6 +79,13 @@ export default function ProblemScreen() {
             })
           )
         );
+
+        // Persist match results so the matches tab can load them
+        await supabase.from("matches").insert({
+          seeker_id: userId,
+          problem_text: problemText,
+          result: matches,
+        });
       }
 
       router.push({
