@@ -1,0 +1,2 @@
+[functions.dev-generate-elder]
+verify_jwt = false
