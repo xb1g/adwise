@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from "react";
 import {
   View, Text, Pressable, StyleSheet, ActivityIndicator,
-  Animated, SafeAreaView, ScrollView,
+  Animated, ScrollView,
 } from "react-native";
-import { Audio } from "expo-av";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { useAudioRecorder, AudioModule, RecordingPresets } from "expo-audio";
 import * as FileSystem from "expo-file-system";
 import { router } from "expo-router";
 import { useAuth } from "../../lib/auth";
@@ -27,7 +28,7 @@ export default function ElderRecord() {
   const [transcript, setTranscript] = useState("");
   const [wisdomSnippets, setWisdomSnippets] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const recordingRef = useRef<Audio.Recording | null>(null);
+  const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const pulseLoopRef = useRef<Animated.CompositeAnimation | null>(null);
 
@@ -53,16 +54,14 @@ export default function ElderRecord() {
     if (isProcessing) return;
     setError(null);
     try {
-      const { status } = await Audio.requestPermissionsAsync();
-      if (status !== "granted") {
+      const { granted } = await AudioModule.requestRecordingPermissionsAsync();
+      if (!granted) {
         setError("Microphone permission required.");
         return;
       }
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
-      const { recording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
-      );
-      recordingRef.current = recording;
+      AudioModule.setAudioMode({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
+      await audioRecorder.prepareToRecordAsync();
+      audioRecorder.record();
       setPhase("recording");
     } catch (err) {
       console.error("[record] start error:", err);
@@ -71,14 +70,12 @@ export default function ElderRecord() {
   }
 
   async function stopAndProcess() {
-    if (!recordingRef.current || !user) return;
-    const recording = recordingRef.current;
-    recordingRef.current = null;
+    if (phase !== "recording" || !user) return;
 
     try {
       // Stop recording
-      await recording.stopAndUnloadAsync();
-      const uri = recording.getURI();
+      await audioRecorder.stop();
+      const uri = audioRecorder.uri;
       if (!uri) throw new Error("No recording URI");
 
       // Transcribe
