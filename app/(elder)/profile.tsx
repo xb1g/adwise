@@ -56,8 +56,10 @@ export default function ElderProfile() {
 
   async function handleDevReset() {
     if (!user) return;
-    await supabase.from("user_profiles").delete().eq("user_id", user.id);
-    await supabase.from("wisdom_users").delete().eq("user_id", user.id);
+    const r1 = await supabase.from("user_profiles").delete().eq("user_id", user.id);
+    const r2 = await supabase.from("wisdom_users").delete().eq("user_id", user.id);
+    const r3 = await supabase.from("elder_profiles").delete().eq("user_id", user.id);
+    console.log("[reset] user_profiles:", r1.error, "wisdom_users:", r2.error, "elder_profiles:", r3.error);
     await refreshProfile();
   }
 
