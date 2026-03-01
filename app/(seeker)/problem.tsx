@@ -185,6 +185,20 @@ export default function ProblemScreen() {
 
         <Text style={styles.title}>What problem are you facing right now?</Text>
 
+        {/* Primary: Brainstorm with AI */}
+        <Pressable
+          style={styles.brainstormCta}
+          onPress={() => setShowBrainstorm(true)}
+        >
+          <Text style={styles.brainstormCtaEmoji}>🧠</Text>
+          <View>
+            <Text style={styles.brainstormCtaTitle}>Brainstorm with AI</Text>
+            <Text style={styles.brainstormCtaSub}>Talk it out — AI helps you articulate your situation</Text>
+          </View>
+        </Pressable>
+
+        <Text style={styles.orDividerText}>or type it out</Text>
+
         <TextInput
           style={styles.nameInput}
           placeholder="Your name"
@@ -207,12 +221,6 @@ export default function ProblemScreen() {
         />
 
         <View style={styles.promptsContainer}>
-          <Pressable
-            style={styles.brainstormChip}
-            onPress={() => setShowBrainstorm(true)}
-          >
-            <Text style={styles.brainstormChipText}>🧠 Brainstorm with AI</Text>
-          </Pressable>
           {PROBLEM_PROMPTS.map((prompt) => (
             <Pressable
               key={prompt}
@@ -317,19 +325,41 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#555",
   },
-  brainstormChip: {
-    borderWidth: 2,
-    borderColor: "#111",
+  brainstormCta: {
     backgroundColor: "#111",
-    borderRadius: 20,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
+    shadowColor: "#BFFF00",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 4,
   },
-  brainstormChipText: {
+  brainstormCtaEmoji: {
+    fontSize: 32,
+  },
+  brainstormCtaTitle: {
+    fontFamily: "Orbit_400Regular",
+    fontSize: 18,
+    fontWeight: "900",
+    color: "#BFFF00",
+    marginBottom: 2,
+  },
+  brainstormCtaSub: {
+    fontFamily: "Orbit_400Regular",
+    fontSize: 12,
+    color: "#888",
+  },
+  orDividerText: {
     fontFamily: "Orbit_400Regular",
     fontSize: 13,
-    color: "#BFFF00",
-    fontWeight: "700",
+    color: "#999",
+    textAlign: "center",
+    marginBottom: 12,
   },
   btn: {
     backgroundColor: "#BFFF00",
