@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { Session, User } from "@supabase/supabase-js";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "./supabase";
 
 export type WisdomRole = "elder" | "seeker" | null;
@@ -53,7 +54,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setProfileLoading(true);
     const { data } = await supabase
       .from("user_profiles")
-      .select("onboarding_done, life_areas, direction, values, blockers, weekly_hours")
+      .select(
+        "onboarding_done, life_areas, direction, values, blockers, weekly_hours",
+      )
       .eq("user_id", userId)
       .maybeSingle();
     setProfile(data ?? null);
@@ -64,7 +67,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setRoleLoading(true);
     // Seed from local cache first for instant UI
     try {
-      const cached = localStorage.getItem(ROLE_CACHE_KEY);
+      const cached = await AsyncStorage.getItem(ROLE_CACHE_KEY);
       if (cached) setRole(cached as WisdomRole);
     } catch {}
 
@@ -76,8 +79,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const fetched = (data?.role as WisdomRole) ?? null;
     setRole(fetched);
     try {
-      if (fetched) localStorage.setItem(ROLE_CACHE_KEY, fetched);
-      else localStorage.removeItem(ROLE_CACHE_KEY);
+      if (fetched) await AsyncStorage.setItem(ROLE_CACHE_KEY, fetched);
+      else await AsyncStorage.removeItem(ROLE_CACHE_KEY);
     } catch {}
     setRoleLoading(false);
   };
@@ -100,19 +103,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        setSession(session);
-        if (session?.user.id) {
-          fetchProfile(session.user.id);
-          fetchRole(session.user.id);
-        } else {
-          setProfile(null);
-          setRole(null);
-          try { localStorage.removeItem(ROLE_CACHE_KEY); } catch {}
-        }
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      if (session?.user.id) {
+        fetchProfile(session.user.id);
+        fetchRole(session.user.id);
+      } else {
+        setProfile(null);
+        setRole(null);
+        try {
+          AsyncStorage.removeItem(ROLE_CACHE_KEY);
+        } catch {}
       }
-    );
+    });
 
     return () => subscription.unsubscribe();
   }, []);

@@ -1,16 +1,19 @@
 {
   "build": {
     "development": {
-      "ios": {
-        "simulator": true
-      }
+      "android": {},
+      "ios": {}
     },
     "preview": {
       "distribution": "internal"
     },
     "production": {
+      "android": {},
+      "ios": {}
+    },
+    "simulator": {
       "ios": {
-        "simulator": false
+        "simulator": true
       }
     }
   }

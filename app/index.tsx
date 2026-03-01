@@ -22,9 +22,21 @@ export default function Page() {
   const onSelectRole = async (selected: "elder" | "seeker") => {
     setHandleRole(selected);
     try {
-      // Seekers sign up after filling in their name + problem
+      // Seekers go through their own onboarding first
       if (selected === "seeker") {
-        router.replace("/(seeker)/problem");
+        let currentUserId = user?.id;
+        if (!currentUserId) {
+          const { data, error } = await supabase.auth.signInAnonymously();
+          if (error) throw error;
+          currentUserId = data.session?.user.id;
+        }
+        if (currentUserId) {
+          await supabase
+            .from("wisdom_users")
+            .upsert({ user_id: currentUserId, role: "seeker" }, { onConflict: "user_id" });
+          await refreshRole();
+        }
+        router.replace("/(seeker)/onboarding");
         return;
       }
 
@@ -62,7 +74,7 @@ export default function Page() {
     if (r === "elder") {
       router.replace("/(elder)/setup");
     } else {
-      router.replace("/(seeker)/problem");
+      router.replace("/(seeker)/onboarding");
     }
   };
 
