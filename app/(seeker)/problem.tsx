@@ -6,6 +6,7 @@ import {
 import { router } from "expo-router";
 import { useAuth } from "../../lib/auth";
 import { matchElders, MatchResult } from "../../lib/ai";
+import { supabase } from "../../lib/supabase";
 
 const MOCK_MATCHES: MatchResult[] = [
   { elder_id: "mock-1", story_id: "s-1", rank: 1, match_reason: "Maria immigrated alone at 35 and rebuilt her career from scratch — exactly the fear of starting over you're describing." },
@@ -59,12 +60,21 @@ export default function ProblemScreen() {
     }
   }
 
+  async function handleSignOut() {
+    await supabase.auth.signOut();
+    router.replace("/");
+  }
+
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
       <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
+        <Pressable style={styles.signOutBtn} onPress={handleSignOut}>
+          <Text style={styles.signOutText}>Sign out</Text>
+        </Pressable>
+        
         <Text style={styles.title}>What's weighing on you?</Text>
         <Text style={styles.subtitle}>
           Be specific. The more honest you are, the better the match.
@@ -116,7 +126,9 @@ export default function ProblemScreen() {
 const styles = StyleSheet.create({
   scroll: { flex: 1, backgroundColor: "#FDFFF5" },
   container: { paddingTop: 80, paddingHorizontal: 24, paddingBottom: 48 },
-  title: { fontSize: 28, fontFamily: "Orbit_400Regular", color: "#111", marginBottom: 8 },
+  signOutBtn: { position: "absolute", top: 60, right: 24, zIndex: 10 },
+  signOutText: { fontFamily: "Orbit_400Regular", fontSize: 12, color: "#111", opacity: 0.5 },
+  title: { fontSize: 28, fontFamily: "Orbit_400Regular", color: "#111", marginBottom: 8, marginTop: 40 },
   subtitle: { fontSize: 14, fontFamily: "Orbit_400Regular", color: "#111", opacity: 0.6, lineHeight: 22, marginBottom: 32 },
   label: { fontSize: 12, fontFamily: "Orbit_400Regular", color: "#111", opacity: 0.5, textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 12, marginTop: 24 },
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },

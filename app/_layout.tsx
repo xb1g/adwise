@@ -3,11 +3,13 @@ import { useFonts } from "expo-font";
 import { useEffect, useState } from "react";
 import { AuthProvider, useAuth } from "../lib/auth";
 import { supabase } from "../lib/supabase";
+import { useLocalSearchParams } from "expo-router";
 
 type WisdomRole = "elder" | "seeker" | null;
 
 function RootNavigator() {
   const { session, loading, profile, profileLoading } = useAuth();
+  const { noredirect } = useLocalSearchParams<{ noredirect?: string }>();
   const [role, setRole] = useState<WisdomRole>(null);
   const [roleLoading, setRoleLoading] = useState(false);
 
@@ -28,6 +30,7 @@ function RootNavigator() {
 
   useEffect(() => {
     if (loading || roleLoading || profileLoading) return;
+    if (noredirect === "1") return;
 
     if (!session) {
       router.replace("/");
@@ -38,7 +41,7 @@ function RootNavigator() {
     } else if (role === "elder") {
       router.replace("/(elder)/profile");
     } else {
-      router.replace("/goal-create");
+      router.replace("/(seeker)/problem");
     }
   }, [session, loading, role, roleLoading, profile, profileLoading]);
 
@@ -49,7 +52,6 @@ function RootNavigator() {
       <Stack.Screen name="(elder)" />
       <Stack.Screen name="onboarding" />
       <Stack.Screen name="(tabs)" />
-      <Stack.Screen name="goal-create" />
     </Stack>
   );
 }
