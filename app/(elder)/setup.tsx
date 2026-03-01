@@ -227,7 +227,9 @@ export default function ElderVoiceOnboarding() {
     } catch (_) {}
     if (phase === "reviewing") {
       setExtractedProfile(null);
+      setExtractionFailed(false);
       setMessages([]);
+      messagesRef.current = [];
       setPaused(false);
       setPhase("intro");
     } else {
