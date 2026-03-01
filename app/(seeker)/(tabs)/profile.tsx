@@ -1,14 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import {
   View,
   Text,
+  TextInput,
   ScrollView,
   Pressable,
   StyleSheet,
   ActivityIndicator,
   Alert,
 } from "react-native";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { supabase } from "../../../lib/supabase";
 import { useAuth } from "../../../lib/auth";
 
@@ -17,6 +18,7 @@ type SeekerProfile = {
   age_range: string | null;
   categories: string[];
   problem_text: string | null;
+  phone: string | null;
 };
 
 type Booking = {
@@ -48,13 +50,27 @@ export default function SeekerProfileTab() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  // Edit mode
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+  const [editAgeRange, setEditAgeRange] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (user) loadData();
+    }, [user])
+  );
+
+  function loadData() {
     if (!user) return;
+    setLoading(true);
 
     Promise.all([
       supabase
         .from("seeker_profiles")
-        .select("name, age_range, categories, problem_text")
+        .select("name, age_range, categories, problem_text, phone")
         .eq("user_id", user.id)
         .single(),
       supabase
@@ -63,11 +79,63 @@ export default function SeekerProfileTab() {
         .eq("seeker_id", user.id)
         .order("created_at", { ascending: false }),
     ]).then(([profileRes, bookingsRes]) => {
-      setProfile(profileRes.data ?? null);
+      const p = profileRes.data ?? null;
+      setProfile(p);
+      setEditName(p?.name ?? "");
+      setEditPhone(p?.phone ?? "");
+      setEditAgeRange(p?.age_range ?? "");
       setBookings((bookingsRes.data as Booking[]) ?? []);
       setLoading(false);
     });
-  }, [user]);
+  }
+
+  function startEditing() {
+    setEditName(profile?.name ?? "");
+    setEditPhone(profile?.phone ?? "");
+    setEditAgeRange(profile?.age_range ?? "");
+    setEditing(true);
+  }
+
+  async function handleSave() {
+    if (!user) return;
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from("seeker_profiles")
+        .update({
+          name: editName.trim() || null,
+          phone: editPhone.trim() || null,
+          age_range: editAgeRange.trim() || null,
+        })
+        .eq("user_id", user.id);
+
+      if (error) throw error;
+
+      // Also update wisdom_users name
+      if (editName.trim()) {
+        await supabase
+          .from("wisdom_users")
+          .update({ name: editName.trim() })
+          .eq("user_id", user.id);
+      }
+
+      setProfile((prev) =>
+        prev
+          ? {
+              ...prev,
+              name: editName.trim() || null,
+              phone: editPhone.trim() || null,
+              age_range: editAgeRange.trim() || null,
+            }
+          : prev
+      );
+      setEditing(false);
+    } catch {
+      Alert.alert("Error", "Couldn't save profile. Try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function handleSignOut() {
     await signOut();
@@ -119,19 +187,92 @@ export default function SeekerProfileTab() {
     <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
       {/* Header */}
       <View style={styles.headerRow}>
-        <Text style={styles.name}>
-          {profile?.name ?? "You"}
-          {profile?.age_range ? (
-            <Text style={styles.ageRange}>,  {profile.age_range}</Text>
-          ) : null}
-        </Text>
-      </View>
-      {user?.email ? (
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>Email</Text>
-          <Text style={styles.sectionValue}>{user.email}</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.name}>
+            {profile?.name ?? "You"}
+            {profile?.age_range ? (
+              <Text style={styles.ageRange}>,  {profile.age_range}</Text>
+            ) : null}
+          </Text>
         </View>
-      ) : null}
+        {!editing ? (
+          <Pressable style={styles.editProfileBtn} onPress={startEditing}>
+            <Text style={styles.editProfileBtnText}>Edit</Text>
+          </Pressable>
+        ) : null}
+      </View>
+
+      {/* Edit form */}
+      {editing ? (
+        <View style={styles.editForm}>
+          <Text style={styles.fieldLabel}>Name</Text>
+          <TextInput
+            style={styles.input}
+            value={editName}
+            onChangeText={setEditName}
+            placeholder="Your name"
+            placeholderTextColor="#999"
+            autoCapitalize="words"
+          />
+
+          <Text style={styles.fieldLabel}>Phone number</Text>
+          <TextInput
+            style={styles.input}
+            value={editPhone}
+            onChangeText={setEditPhone}
+            placeholder="+1 (555) 000-0000"
+            placeholderTextColor="#999"
+            keyboardType="phone-pad"
+            autoComplete="tel"
+          />
+
+          <Text style={styles.fieldLabel}>Age range</Text>
+          <TextInput
+            style={styles.input}
+            value={editAgeRange}
+            onChangeText={setEditAgeRange}
+            placeholder="e.g. 20s, 30s"
+            placeholderTextColor="#999"
+          />
+
+          <View style={styles.editActions}>
+            <Pressable
+              style={styles.cancelBtn}
+              onPress={() => setEditing(false)}
+            >
+              <Text style={styles.cancelBtnText}>Cancel</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.saveBtn, saving && styles.saveBtnDisabled]}
+              onPress={handleSave}
+              disabled={saving}
+            >
+              {saving ? (
+                <ActivityIndicator color="#111" size="small" />
+              ) : (
+                <Text style={styles.saveBtnText}>Save</Text>
+              )}
+            </Pressable>
+          </View>
+        </View>
+      ) : (
+        <>
+          {/* Display info */}
+          {user?.email ? (
+            <View style={styles.section}>
+              <Text style={styles.sectionLabel}>Email</Text>
+              <Text style={styles.sectionValue}>{user.email}</Text>
+            </View>
+          ) : null}
+
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>Phone</Text>
+            <Text style={styles.sectionValue}>
+              {profile?.phone || "Not added yet"}
+            </Text>
+          </View>
+        </>
+      )}
 
       {/* Category chips */}
       {profile?.categories?.length ? (
@@ -232,6 +373,8 @@ const styles = StyleSheet.create({
     backgroundColor: "#FDFFF5",
   },
   headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
     marginBottom: 4,
   },
   name: {
@@ -248,6 +391,82 @@ const styles = StyleSheet.create({
     color: "#111",
     opacity: 0.6,
   },
+  editProfileBtn: {
+    borderWidth: 1.5,
+    borderColor: "#111",
+    borderRadius: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 16,
+  },
+  editProfileBtnText: {
+    fontFamily: "Orbit_400Regular",
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#111",
+  },
+
+  /* Edit form */
+  editForm: {
+    backgroundColor: "#FFF",
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: "#E0E0D8",
+    padding: 16,
+    gap: 12,
+  },
+  fieldLabel: {
+    fontFamily: "Orbit_400Regular",
+    fontSize: 11,
+    color: "#111",
+    opacity: 0.5,
+    textTransform: "uppercase",
+    letterSpacing: 1.2,
+  },
+  input: {
+    borderWidth: 1.5,
+    borderColor: "#D8D8D0",
+    borderRadius: 8,
+    padding: 12,
+    fontFamily: "Orbit_400Regular",
+    fontSize: 15,
+    color: "#111",
+    backgroundColor: "#FDFFF5",
+  },
+  editActions: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 4,
+  },
+  cancelBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: "center",
+    borderWidth: 1.5,
+    borderColor: "#D8D8D0",
+    borderRadius: 8,
+  },
+  cancelBtnText: {
+    fontFamily: "Orbit_400Regular",
+    fontSize: 14,
+    color: "#666",
+  },
+  saveBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: "center",
+    backgroundColor: "#BFFF00",
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: "#111",
+  },
+  saveBtnDisabled: { opacity: 0.6 },
+  saveBtnText: {
+    fontFamily: "Orbit_400Regular",
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#111",
+  },
+
   chipRow: {
     flexDirection: "row",
     flexWrap: "wrap",

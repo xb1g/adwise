@@ -150,7 +150,7 @@ export default function SeekerOnboarding() {
         .update({ name })
         .eq("user_id", user.id);
 
-      router.replace("/(seeker)/(tabs)/feed");
+      router.replace("/(seeker)/(tabs)/home");
     } catch (err) {
       console.error("[onboarding] save error:", err);
       Alert.alert("Save failed", "Please check your connection and try again.");

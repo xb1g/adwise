@@ -62,7 +62,12 @@ function RequestCard({ request }: { request: ElderRequest }) {
   const displayName = request.seeker_name?.trim() || "Seeker";
 
   return (
-    <View style={styles.card}>
+    <Pressable
+      style={styles.card}
+      onPress={() => router.push(`/(elder)/request/${request.id}`)}
+      accessibilityRole="button"
+      accessibilityLabel={`View request from ${displayName}`}
+    >
       <View style={styles.cardHeader}>
         <View style={[styles.rankBadge, isTopRank && styles.rankBadgeAccent]}>
           <Text style={[styles.rankText, isTopRank && styles.rankTextAccent]}>
@@ -72,7 +77,7 @@ function RequestCard({ request }: { request: ElderRequest }) {
         <Text style={styles.timestamp}>{formatDate(request.created_at)}</Text>
       </View>
 
-      <Text style={styles.seekerText}>
+      <Text style={styles.seekerName}>
         {displayName}
       </Text>
       {hasProfileMetadata ? (
@@ -103,7 +108,9 @@ function RequestCard({ request }: { request: ElderRequest }) {
       <Text style={styles.matchReason} numberOfLines={3}>
         {request.match_reason?.trim() ? request.match_reason : "No match reason recorded."}
       </Text>
-    </View>
+
+      <Text style={styles.viewMore}>View full details →</Text>
+    </Pressable>
   );
 }
 
@@ -292,12 +299,12 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     lineHeight: 30,
   },
-  seekerText: {
+  seekerName: {
     fontFamily: "Orbit_400Regular",
-    fontSize: 12,
+    fontSize: 22,
     color: "#111",
     fontWeight: "900",
-    letterSpacing: 1,
+    lineHeight: 28,
   },
   seekerMeta: {
     fontFamily: "Orbit_400Regular",
@@ -344,5 +351,13 @@ const styles = StyleSheet.create({
     color: "#111",
     fontWeight: "900",
     lineHeight: 32,
+  },
+  viewMore: {
+    fontFamily: "Orbit_400Regular",
+    fontSize: 13,
+    color: "#9FE800",
+    fontWeight: "900",
+    letterSpacing: 1,
+    marginTop: 4,
   },
 });

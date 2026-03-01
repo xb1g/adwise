@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 
 const TAB_CONFIG: Record<string, { label: string; icon: string }> = {
-  feed: { label: "Feed", icon: "✦" },
+  home: { label: "Home", icon: "⌂" },
   matches: { label: "Matches", icon: "◈" },
   profile: { label: "Profile", icon: "◉" },
 };
@@ -58,7 +58,7 @@ export default function SeekerTabsLayout() {
       tabBar={(props) => <FloatingTabBar {...props} />}
       screenOptions={{ headerShown: false }}
     >
-      <Tabs.Screen name="feed" />
+      <Tabs.Screen name="home" />
       <Tabs.Screen name="matches" />
       <Tabs.Screen name="profile" />
     </Tabs>

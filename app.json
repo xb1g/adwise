@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "adwise",
-    "scheme": "adwise",
+    "scheme": ["adwise", "com.bunyasit.adwise"],
     "slug": "adwise",
     "version": "1.0.0",
     "orientation": "portrait",

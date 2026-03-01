@@ -9,11 +9,15 @@ import { ElevenLabsProvider } from "@elevenlabs/react-native";
 // usePathname() strips Expo Router group segments, so:
 //   (elder)/setup  → /setup      (elder)/home → /home
 //   (seeker)/onboarding → /onboarding
-//   (seeker)/(tabs)/feed → /feed   (seeker)/(tabs)/profile → /profile
+//   (seeker)/(tabs)/home → /home   (seeker)/(tabs)/profile → /profile
 const ELDER_PAGES = new Set(["/home", "/setup", "/profile", "/requests", "/sessions", "/stories", "/record", "/story-player"]);
 
+function isElderPage(pathname: string) {
+  return ELDER_PAGES.has(pathname) || pathname.startsWith("/request/");
+}
+
 function isSeekerPage(pathname: string) {
-  return ["/feed", "/matches", "/profile", "/problem", "/onboarding"].includes(pathname) ||
+  return ["/home", "/matches", "/profile", "/problem", "/onboarding"].includes(pathname) ||
     pathname.startsWith("/elder/") ||
     pathname.startsWith("/matches/");
 }
@@ -76,16 +80,18 @@ function RootNavigator() {
     // /problem is a special seeker page that doesn't require onboarding
     if (pathname === "/problem") return;
 
+    const isAuthPage = pathname === "/" || pathname === "/sign-in" || pathname === "/google-auth";
+
     if (!session) {
-      if (pathname !== "/" && pathname !== "/sign-in") {
+      if (!isAuthPage) {
         console.log("[_layout] no session → /");
         router.replace("/");
       }
     } else if (!role) {
       // Guard against race where role is transiently null during sign-in
       // (onAuthStateChange fires before wisdom_users upsert completes).
-      const isRolePage = ELDER_PAGES.has(pathname) || isSeekerPage(pathname);
-      if (!isRolePage && pathname !== "/" && pathname !== "/sign-in") {
+      const isRolePage = isElderPage(pathname) || isSeekerPage(pathname);
+      if (!isRolePage && !isAuthPage) {
         console.log("[_layout] no role, unknown route → /");
         router.replace("/");
       } else {
@@ -98,7 +104,7 @@ function RootNavigator() {
       }
       if (elderOnboardingDone) {
         // Allow free navigation within elder pages (except /setup which means stale state).
-        if (!ELDER_PAGES.has(pathname) || pathname === "/setup") {
+        if (!isElderPage(pathname) || pathname === "/setup") {
           console.log(`[_layout] elder done, bad path "${pathname}" → /home`);
           router.replace("/(elder)/home");
         } else {
@@ -120,11 +126,11 @@ function RootNavigator() {
       if (seekerOnboardingDone) {
         // Redirect away from onboarding only; all other seeker pages are fine.
         if (pathname === "/onboarding") {
-          console.log("[_layout] seeker done but on /onboarding → /feed");
-          router.replace("/(seeker)/(tabs)/feed");
+          console.log("[_layout] seeker done but on /onboarding → /home");
+          router.replace("/(seeker)/(tabs)/home");
         } else if (!isSeekerPage(pathname)) {
-          console.log(`[_layout] seeker done, unknown page "${pathname}" → /feed`);
-          router.replace("/(seeker)/(tabs)/feed");
+          console.log(`[_layout] seeker done, unknown page "${pathname}" → /home`);
+          router.replace("/(seeker)/(tabs)/home");
         } else {
           console.log(`[_layout] seeker done, staying on ${pathname}`);
         }
@@ -143,6 +149,7 @@ function RootNavigator() {
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="index" />
       <Stack.Screen name="sign-in" />
+      <Stack.Screen name="google-auth" />
       <Stack.Screen name="(elder)" />
       <Stack.Screen name="(seeker)" />
       <Stack.Screen name="(tabs)" />

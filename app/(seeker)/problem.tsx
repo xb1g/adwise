@@ -148,13 +148,7 @@ export default function ProblemScreen() {
         });
       }
 
-      router.push({
-        pathname: "/(seeker)/matches",
-        params: {
-          matches: JSON.stringify(matches),
-          problem: problemText,
-        },
-      });
+      router.replace("/(seeker)/(tabs)/matches");
     } catch (err) {
       console.error("Match failed:", err);
     } finally {

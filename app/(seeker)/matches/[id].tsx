@@ -6,11 +6,9 @@ import {
   Pressable,
   StyleSheet,
   ActivityIndicator,
-  Alert,
 } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import { supabase } from "../../../lib/supabase";
-import { useAuth } from "../../../lib/auth";
 
 type ElderCard = {
   elder_id: string;
@@ -24,36 +22,11 @@ type ElderCard = {
   preview_text: string;
 };
 
-async function ensureSeekerProfileName(userId: string, fallbackName: string | null | undefined) {
-  const trimmedName = fallbackName?.trim();
-  if (!trimmedName) return;
-
-  try {
-    const { data: existingProfile, error: existingError } =
-      await supabase.from("seeker_profiles").select("name").eq("user_id", userId).maybeSingle();
-
-    if (existingError) {
-      console.error("[match detail] check seeker profile failed:", existingError);
-      return;
-    }
-
-    if (existingProfile?.name?.trim()) return;
-
-    await supabase
-      .from("seeker_profiles")
-      .upsert({ user_id: userId, name: trimmedName }, { onConflict: "user_id" });
-  } catch (err) {
-    console.error("[match detail] ensure seeker profile name failed:", err);
-  }
-}
-
 export default function MatchDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { user } = useAuth();
   const [cards, setCards] = useState<ElderCard[]>([]);
   const [problemText, setProblemText] = useState("");
   const [loading, setLoading] = useState(true);
-  const [bookingId, setBookingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -118,36 +91,6 @@ export default function MatchDetail() {
     setLoading(false);
   }
 
-  async function handleBook(card: ElderCard) {
-    if (!user) return;
-    const fallbackName =
-      user.user_metadata?.full_name ||
-      user.user_metadata?.name ||
-      user.email?.split("@")[0];
-
-    setBookingId(card.elder_id);
-    try {
-      await ensureSeekerProfileName(user.id, fallbackName);
-      const { error } = await supabase.from("bookings").insert({
-        elder_id: card.elder_id,
-        seeker_id: user.id,
-        problem_text: problemText,
-        match_reason: card.match_reason,
-        status: "pending",
-      });
-      if (error) throw error;
-      Alert.alert(
-        "Booking requested!",
-        `${card.name || "The elder"} will be notified and reach out to schedule your conversation.`,
-        [{ text: "Done" }]
-      );
-    } catch {
-      Alert.alert("Error", "Couldn't complete booking. Try again.");
-    } finally {
-      setBookingId(null);
-    }
-  }
-
   if (loading) {
     return (
       <View style={styles.center}>
@@ -171,7 +114,6 @@ export default function MatchDetail() {
 
       {cards.map((card, index) => {
         const isBest = index === 0;
-        const isBooking = bookingId === card.elder_id;
 
         return (
           <Pressable
@@ -225,20 +167,9 @@ export default function MatchDetail() {
             </Text>
             <Text style={styles.matchReason}>✦ {card.match_reason}</Text>
 
-            <Pressable
-              style={[styles.bookBtn, isBooking && styles.bookBtnDisabled]}
-              disabled={isBooking}
-              onPress={(e) => {
-                e.stopPropagation();
-                handleBook(card);
-              }}
-            >
-              {isBooking ? (
-                <ActivityIndicator color="#111" size="small" />
-              ) : (
-                <Text style={styles.bookBtnText}>Book</Text>
-              )}
-            </Pressable>
+            <View style={styles.viewBtn}>
+              <Text style={styles.viewBtnText}>View profile →</Text>
+            </View>
           </Pressable>
         );
       })}
@@ -384,15 +315,15 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     fontStyle: "italic",
   },
-  bookBtn: {
-    backgroundColor: "#BFFF00",
+  viewBtn: {
+    borderWidth: 1.5,
+    borderColor: "#E0E0D8",
     paddingVertical: 10,
     alignItems: "center",
     borderRadius: 6,
     marginTop: 12,
   },
-  bookBtnDisabled: { opacity: 0.6 },
-  bookBtnText: {
+  viewBtnText: {
     fontFamily: "Orbit_400Regular",
     fontSize: 14,
     fontWeight: "700",
