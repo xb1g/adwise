@@ -10,7 +10,6 @@ import {
   Platform,
 } from "react-native";
 import { useState, useRef, useEffect } from "react";
-import { router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/auth";
@@ -120,6 +119,30 @@ export default function OnboardingScreen() {
     }
   };
 
+  const handleSkip = async () => {
+    if (!user) return;
+    setSaving(true);
+    try {
+      await supabase.from("user_profiles").upsert(
+        {
+          user_id: user.id,
+          onboarding_done: true,
+          life_areas: ["dev"],
+          direction: "dev skip",
+          values: "dev skip",
+          blockers: "dev skip",
+          weekly_hours: 0,
+        },
+        { onConflict: "user_id" }
+      );
+      await refreshProfile();
+    } catch (err) {
+      console.error("[onboarding skip]", err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleSave = async () => {
     if (!extracted || !user) return;
     setSaving(true);
@@ -137,7 +160,6 @@ export default function OnboardingScreen() {
         { onConflict: "user_id" }
       );
       await refreshProfile();
-      router.replace("/(tabs)/goals");
     } catch (err) {
       console.error("[onboarding save error]", err);
     } finally {
@@ -301,6 +323,9 @@ export default function OnboardingScreen() {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <StatusBar style="dark" />
+      <Pressable style={styles.devSkipBtn} onPress={handleSkip} disabled={saving}>
+        <Text style={styles.devSkipText}>skip (dev)</Text>
+      </Pressable>
 
       <ScrollView
         ref={scrollRef}
@@ -594,5 +619,20 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#111",
     letterSpacing: 0.5,
+  },
+  devSkipBtn: {
+    position: "absolute",
+    top: 52,
+    right: 20,
+    zIndex: 10,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: "#CCC",
+  },
+  devSkipText: {
+    fontSize: 11,
+    fontFamily: "Orbit_400Regular",
+    color: "#999",
   },
 });

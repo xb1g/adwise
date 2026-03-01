@@ -7,7 +7,7 @@ import { supabase } from "../lib/supabase";
 type WisdomRole = "elder" | "seeker" | null;
 
 function RootNavigator() {
-  const { session, loading } = useAuth();
+  const { session, loading, profile, profileLoading } = useAuth();
   const [role, setRole] = useState<WisdomRole>(null);
   const [roleLoading, setRoleLoading] = useState(false);
 
@@ -24,21 +24,23 @@ function RootNavigator() {
         setRole((data?.role as WisdomRole) ?? null);
         setRoleLoading(false);
       });
-  }, [session?.user?.id]);
+  }, [session?.user?.id, profile?.onboarding_done]);
 
   useEffect(() => {
-    if (loading || roleLoading) return;
+    if (loading || roleLoading || profileLoading) return;
 
     if (!session) {
       router.replace("/");
     } else if (!role) {
       router.replace("/role-select");
+    } else if (!profile?.onboarding_done) {
+      router.replace("/onboarding");
     } else if (role === "elder") {
       router.replace("/(elder)/profile");
     } else {
       router.replace("/goal-create");
     }
-  }, [session, loading, role, roleLoading]);
+  }, [session, loading, role, roleLoading, profile, profileLoading]);
 
   return (
     <Stack screenOptions={{ headerShown: false }}>
