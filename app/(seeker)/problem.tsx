@@ -64,7 +64,22 @@ export default function ProblemScreen() {
 
       let matches: MatchResult[];
 
-      matches = await matchElders(problemText, user?.id ?? undefined);
+      matches = await matchElders(problemText, userId ?? undefined);
+
+      // Save each matched elder so they can see requests
+      if (userId && matches.length > 0) {
+        await Promise.all(
+          matches.map((m) =>
+            supabase.from("elder_requests").insert({
+              elder_id: m.elder_id,
+              seeker_id: userId,
+              problem_text: problemText,
+              match_reason: m.match_reason ?? "",
+              rank: m.rank ?? 1,
+            })
+          )
+        );
+      }
 
       router.push({
         pathname: "/(seeker)/matches",

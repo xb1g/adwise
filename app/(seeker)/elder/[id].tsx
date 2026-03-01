@@ -1,9 +1,11 @@
 import { useState } from "react";
-import { View, Text, ScrollView, Pressable, StyleSheet, Alert } from "react-native";
+import { View, Text, ScrollView, Pressable, StyleSheet, Alert, ActivityIndicator } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
+import { useAuth } from "../../../lib/auth";
+import { supabase } from "../../../lib/supabase";
 
 export default function ElderDetail() {
-  const { id, matchReason, bio, ageRange, lifeAreas, previewText } =
+  const { id, matchReason, bio, ageRange, lifeAreas, previewText, problemText } =
     useLocalSearchParams<{
       id: string;
       storyId: string;
@@ -12,9 +14,12 @@ export default function ElderDetail() {
       ageRange: string;
       lifeAreas: string;
       previewText: string;
+      problemText: string;
     }>();
 
+  const { user } = useAuth();
   const [unlocked, setUnlocked] = useState(false);
+  const [booking, setBooking] = useState(false);
   const areas: string[] = JSON.parse(lifeAreas ?? "[]");
 
   function handleUnlock() {
@@ -22,12 +27,28 @@ export default function ElderDetail() {
     setUnlocked(true);
   }
 
-  function handleBook() {
-    Alert.alert(
-      "Book a conversation",
-      "In the full version, you'd schedule a 30-minute call with this elder. Coming soon.",
-      [{ text: "Got it" }]
-    );
+  async function handleBook() {
+    if (!user) return;
+    setBooking(true);
+    try {
+      const { error } = await supabase.from("bookings").insert({
+        elder_id: id,
+        seeker_id: user.id,
+        problem_text: problemText ?? "",
+        match_reason: matchReason ?? "",
+        status: "pending",
+      });
+      if (error) throw error;
+      Alert.alert(
+        "Booking requested!",
+        "The elder will be notified. They'll reach out to schedule your conversation.",
+        [{ text: "Done" }]
+      );
+    } catch (err) {
+      Alert.alert("Error", "Couldn't complete booking. Try again.");
+    } finally {
+      setBooking(false);
+    }
   }
 
   return (
@@ -90,8 +111,12 @@ export default function ElderDetail() {
       )}
 
       {/* Book CTA */}
-      <Pressable style={styles.bookBtn} onPress={handleBook}>
-        <Text style={styles.bookBtnText}>Book a 30-min conversation — $30</Text>
+      <Pressable style={[styles.bookBtn, booking && styles.bookBtnDisabled]} onPress={handleBook} disabled={booking}>
+        {booking ? (
+          <ActivityIndicator color="#111" />
+        ) : (
+          <Text style={styles.bookBtnText}>Book a 30-min conversation — $30</Text>
+        )}
       </Pressable>
 
       <Text style={styles.bookNote}>
@@ -126,6 +151,7 @@ const styles = StyleSheet.create({
   unlockedStory: { backgroundColor: "#F8FFE8", padding: 20, borderLeftWidth: 3, borderLeftColor: "#BFFF00" },
   unlockedText: { fontFamily: "Orbit_400Regular", fontSize: 14, color: "#111", lineHeight: 24 },
   bookBtn: { backgroundColor: "#BFFF00", paddingVertical: 16, alignItems: "center", marginTop: 40 },
+  bookBtnDisabled: { opacity: 0.6 },
   bookBtnText: { fontFamily: "Orbit_400Regular", fontSize: 15, fontWeight: "700", color: "#111" },
   bookNote: { fontFamily: "Orbit_400Regular", fontSize: 12, color: "#111", opacity: 0.5, textAlign: "center", marginTop: 12, lineHeight: 18 },
 });
