@@ -18,7 +18,7 @@ export default function RoleSelect() {
     if (role === "elder") {
       router.replace("/(elder)/setup");
     } else {
-      router.replace("/(seeker)/problem");
+      router.replace("/goal-create");
     }
   }
 

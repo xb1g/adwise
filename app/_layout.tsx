@@ -36,7 +36,7 @@ function RootNavigator() {
     } else if (role === "elder") {
       router.replace("/(elder)/profile");
     } else {
-      router.replace("/(seeker)/problem");
+      router.replace("/goal-create");
     }
   }, [session, loading, role, roleLoading]);
 
@@ -45,7 +45,6 @@ function RootNavigator() {
       <Stack.Screen name="index" />
       <Stack.Screen name="role-select" />
       <Stack.Screen name="(elder)" />
-      <Stack.Screen name="(seeker)" />
       <Stack.Screen name="onboarding" />
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="goal-create" />

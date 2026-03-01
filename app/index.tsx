@@ -29,7 +29,7 @@ const COLORS = [
 ];
 
 export default function Page() {
-  const { signInWithGoogle, loading: authLoading } = useAuth();
+  const { signInAnonymously, loading: authLoading } = useAuth();
   const [signingIn, setSigningIn] = useState(false);
   const [hypeActive, setHypeActive] = useState(false);
   const [colorIdx, setColorIdx] = useState(0);
@@ -146,7 +146,7 @@ export default function Page() {
           onPress={async () => {
             setSigningIn(true);
             try {
-              await signInWithGoogle();
+              await signInAnonymously();
             } catch (e) {
               console.error("Sign in error:", e);
               setSigningIn(false);

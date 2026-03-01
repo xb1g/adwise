@@ -1,9 +1,6 @@
-import * as WebBrowser from "expo-web-browser";
 import { createContext, useContext, useEffect, useState } from "react";
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
-
-WebBrowser.maybeCompleteAuthSession();
 
 export type UserProfile = {
   onboarding_done: boolean;
@@ -21,7 +18,7 @@ type AuthContext = {
   profile: UserProfile | null;
   profileLoading: boolean;
   refreshProfile: () => Promise<void>;
-  signInWithGoogle: () => Promise<void>;
+  signInAnonymously: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContext>({
@@ -31,21 +28,8 @@ const AuthContext = createContext<AuthContext>({
   profile: null,
   profileLoading: false,
   refreshProfile: async () => {},
-  signInWithGoogle: async () => {},
+  signInAnonymously: async () => {},
 });
-
-function extractParamsFromUrl(url: string) {
-  const parsedUrl = new URL(url);
-  const hash = parsedUrl.hash.substring(1);
-  const params = new URLSearchParams(hash);
-  return {
-    access_token: params.get("access_token"),
-    expires_in: parseInt(params.get("expires_in") || "0"),
-    refresh_token: params.get("refresh_token"),
-    token_type: params.get("token_type"),
-    provider_token: params.get("provider_token"),
-  };
-}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
@@ -86,35 +70,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  const signInWithGoogle = async () => {
-    const redirectTo = "adwise://google-auth";
-
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo, skipBrowserRedirect: true },
-    });
-
+  const signInAnonymously = async () => {
+    const { data, error } = await supabase.auth.signInAnonymously();
     if (error) throw error;
-
-    const result = await WebBrowser.openAuthSessionAsync(data.url!, redirectTo, {
-      showInRecents: true,
-    });
-
-    if (result && result.type === "success") {
-      const params = extractParamsFromUrl(result.url);
-      if (params.access_token && params.refresh_token) {
-        const { data: sessionData } = await supabase.auth.setSession({
-          access_token: params.access_token,
-          refresh_token: params.refresh_token,
-        });
-        if (sessionData.session) setSession(sessionData.session);
-      }
+    if (data.session) {
+      setSession(data.session);
     }
   };
 
   return (
     <AuthContext.Provider
-      value={{ session, user: session?.user ?? null, loading, profile, profileLoading, refreshProfile, signInWithGoogle }}
+      value={{
+        session,
+        user: session?.user ?? null,
+        loading,
+        profile,
+        profileLoading,
+        refreshProfile,
+        signInAnonymously,
+      }}
     >
       {children}
     </AuthContext.Provider>
