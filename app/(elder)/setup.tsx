@@ -33,6 +33,7 @@ export default function ElderVoiceOnboarding() {
   const scrollRef = useRef<ScrollView>(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const pulseRef = useRef<Animated.CompositeAnimation | null>(null);
+  const messagesRef = useRef<Message[]>([]);
 
   const [phase, setPhase] = useState<Phase>("intro");
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -40,6 +41,7 @@ export default function ElderVoiceOnboarding() {
   const [paused, setPaused] = useState(false);
   const [extractedProfile, setExtractedProfile] =
     useState<ExtractedProfile | null>(null);
+  const [extractionFailed, setExtractionFailed] = useState(false);
 
   const conversation = useConversation({
     clientTools: {
@@ -54,14 +56,12 @@ export default function ElderVoiceOnboarding() {
     onModeChange: ({ mode }: { mode: "speaking" | "listening" }) => {
       setIsSpeaking(mode === "speaking");
     },
-    onMessage: ({
-      message,
-      role,
-    }: {
-      message: string;
-      role: "user" | "agent";
-    }) => {
-      if (message) setMessages((prev) => [...prev, { role, text: message }]);
+    onMessage: ({ message, role }: { message: string; role: "user" | "agent" }) => {
+      if (message) {
+        const next = [...messagesRef.current, { role, text: message }];
+        messagesRef.current = next;
+        setMessages(next);
+      }
     },
     onConnect: ({ conversationId: cid }: { conversationId: string }) => {
       console.log("[elder-onboarding] connected", cid);
@@ -106,11 +106,9 @@ export default function ElderVoiceOnboarding() {
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (conversation.status === "connected") {
-        conversation.endSession();
-      }
+      try { conversation.endSession(); } catch (_) {}
     };
-  }, []);
+  }, [conversation]);
 
   async function handleStartSession() {
     setPhase("conversation");
@@ -121,12 +119,14 @@ export default function ElderVoiceOnboarding() {
     setPhase("reviewing");
     const { data, error } = await supabase.functions.invoke(
       "elder-onboarding-extract",
-      { body: { messages } },
+      { body: { messages: messagesRef.current } },
     );
     if (error || !data) {
-      await finishOnboarding(null, null, [], "", [], "");
+      setExtractionFailed(true);
+      setPhase("reviewing");
       return;
     }
+    setExtractionFailed(false);
     setExtractedProfile(data as ExtractedProfile);
     // phase stays "reviewing" but now extractedProfile is set → shows review UI
   }
@@ -141,22 +141,26 @@ export default function ElderVoiceOnboarding() {
   ) {
     if (!user) return;
     setPhase("saving");
-    const { error } = await supabase.from("elder_profiles").upsert(
-      {
-        user_id: user.id,
-        raw_transcript: rawTranscript,
-        age_range: age_range ?? null,
-        life_areas: life_areas ?? [],
-        bio: bio ?? "",
-        key_topics: key_topics ?? [],
-        wisdom_summary: wisdom_summary ?? "",
-        onboarding_done: true,
-        is_seeded: false,
-      },
-      { onConflict: "user_id" },
-    );
-    if (!error) router.replace("/(elder)/home");
-    else setPhase("reviewing");
+    try {
+      const { error } = await supabase.from("elder_profiles").upsert(
+        {
+          user_id: user.id,
+          raw_transcript: rawTranscript,
+          age_range: age_range ?? null,
+          life_areas: life_areas ?? [],
+          bio: bio ?? "",
+          key_topics: key_topics ?? [],
+          wisdom_summary: wisdom_summary ?? "",
+          onboarding_done: true,
+          is_seeded: false,
+        },
+        { onConflict: "user_id" },
+      );
+      if (!error) router.replace("/(elder)/home");
+      else setPhase("reviewing");
+    } catch {
+      setPhase("reviewing");
+    }
   }
 
   async function handleDone() {
@@ -180,6 +184,7 @@ export default function ElderVoiceOnboarding() {
 
   async function handleStartOver() {
     setExtractedProfile(null);
+    setExtractionFailed(false);
     setMessages([]);
     setPaused(false);
     setPhase("intro");
@@ -226,6 +231,9 @@ export default function ElderVoiceOnboarding() {
       setPaused(false);
       setPhase("intro");
     } else {
+      setMessages([]);
+      messagesRef.current = [];
+      setPaused(false);
       router.replace({ pathname: "/", params: { noredirect: "1" } });
     }
   }
@@ -296,12 +304,24 @@ export default function ElderVoiceOnboarding() {
     return (
       <SafeAreaView style={styles.safe}>
         {extractedProfile === null ? (
-          // Loading state
+          // Loading / error state
           <View style={styles.reviewLoadingContainer}>
-            <ActivityIndicator color="#111" size="large" />
-            <Text style={styles.reviewLoadingText}>
-              Reviewing your conversation...
-            </Text>
+            {extractionFailed ? (
+              <>
+                <Text style={styles.reviewLoadingText}>Couldn't extract your profile.</Text>
+                <Text style={styles.reviewLoadingText}>Tap Start Over to try again.</Text>
+                <Pressable style={[styles.doneBtn, { marginTop: 24 }]} onPress={handleStartOver}>
+                  <Text style={styles.doneBtnText}>Start Over</Text>
+                </Pressable>
+              </>
+            ) : (
+              <>
+                <ActivityIndicator color="#111" size="large" />
+                <Text style={styles.reviewLoadingText}>
+                  Reviewing your conversation...
+                </Text>
+              </>
+            )}
           </View>
         ) : (
           // Review UI
