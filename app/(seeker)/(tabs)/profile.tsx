@@ -20,22 +20,55 @@ type SeekerProfile = {
   problem_text: string | null;
 };
 
+type Booking = {
+  id: string;
+  problem_text: string | null;
+  match_reason: string | null;
+  status: "pending" | "confirmed" | "completed" | "cancelled";
+  created_at: string;
+};
+
+function timeAgo(dateStr: string): string {
+  const seconds = Math.floor(
+    (Date.now() - new Date(dateStr).getTime()) / 1000
+  );
+  if (seconds < 60) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  const months = Math.floor(days / 30);
+  return `${months}mo ago`;
+}
+
 export default function SeekerProfileTab() {
   const { user, refreshRole } = useAuth();
   const [profile, setProfile] = useState<SeekerProfile | null>(null);
+  const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
+  const [switching, setSwitching] = useState(false);
 
   useEffect(() => {
     if (!user) return;
-    supabase
-      .from("seeker_profiles")
-      .select("name, age_range, categories, problem_text")
-      .eq("user_id", user.id)
-      .single()
-      .then(({ data }) => {
-        setProfile(data ?? null);
-        setLoading(false);
-      });
+
+    Promise.all([
+      supabase
+        .from("seeker_profiles")
+        .select("name, age_range, categories, problem_text")
+        .eq("user_id", user.id)
+        .single(),
+      supabase
+        .from("bookings")
+        .select("id, problem_text, match_reason, status, created_at")
+        .eq("seeker_id", user.id)
+        .order("created_at", { ascending: false }),
+    ]).then(([profileRes, bookingsRes]) => {
+      setProfile(profileRes.data ?? null);
+      setBookings((bookingsRes.data as Booking[]) ?? []);
+      setLoading(false);
+    });
   }, [user]);
 
   async function handleDevReset() {
@@ -45,6 +78,16 @@ export default function SeekerProfileTab() {
     console.log("[reset] seeker_profiles:", r1.error, "wisdom_users:", r2.error);
     await refreshRole();
     router.replace("/(seeker)/onboarding");
+  }
+
+  async function handleSwitchToElder() {
+    if (!user) return;
+    setSwitching(true);
+    await supabase
+      .from("wisdom_users")
+      .upsert({ user_id: user.id, role: "elder" }, { onConflict: "user_id" });
+    await refreshRole();
+    // _layout.tsx detects role change and navigates to elder setup or home
   }
 
   async function handleSignOut() {
@@ -103,9 +146,55 @@ export default function SeekerProfileTab() {
 
       {/* Sessions */}
       <Text style={styles.sectionLabel}>Sessions</Text>
-      <Text style={styles.emptyText}>No sessions yet</Text>
+      {bookings.length === 0 ? (
+        <Text style={styles.emptyText}>No sessions yet</Text>
+      ) : (
+        bookings.map((b) => (
+          <View key={b.id} style={styles.bookingCard}>
+            <View style={styles.bookingHeader}>
+              <View
+                style={[
+                  styles.statusBadge,
+                  b.status === "pending" && styles.statusPending,
+                  b.status === "confirmed" && styles.statusConfirmed,
+                  b.status === "completed" && styles.statusCompleted,
+                  b.status === "cancelled" && styles.statusCancelled,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.statusText,
+                    b.status === "confirmed" && styles.statusTextDark,
+                  ]}
+                >
+                  {b.status}
+                </Text>
+              </View>
+              <Text style={styles.bookingTime}>{timeAgo(b.created_at)}</Text>
+            </View>
+            {b.problem_text ? (
+              <Text style={styles.bookingProblem} numberOfLines={2}>
+                {b.problem_text}
+              </Text>
+            ) : null}
+          </View>
+        ))
+      )}
 
       <View style={styles.divider} />
+
+      {/* Switch side */}
+      <Pressable
+        style={[styles.switchBtn, switching && styles.btnDisabled]}
+        onPress={handleSwitchToElder}
+        disabled={switching}
+      >
+        {switching ? (
+          <ActivityIndicator color="#111" size="small" />
+        ) : (
+          <Text style={styles.switchBtnText}>Switch to Elder side 👵</Text>
+        )}
+      </Pressable>
 
       {/* Sign out */}
       <Pressable style={styles.signOutBtn} onPress={handleSignOut}>
@@ -219,7 +308,7 @@ const styles = StyleSheet.create({
     opacity: 0.4,
   },
   signOutBtn: {
-    marginTop: 16,
+    marginTop: 4,
     alignSelf: "center",
     paddingVertical: 10,
     paddingHorizontal: 24,
@@ -242,5 +331,76 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontFamily: "Orbit_400Regular",
     color: "#999",
+  },
+  switchBtn: {
+    borderWidth: 1.5,
+    borderColor: "#111",
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center",
+    marginTop: 8,
+  },
+  switchBtnText: {
+    fontFamily: "Orbit_400Regular",
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#111",
+  },
+  btnDisabled: {
+    opacity: 0.4,
+  },
+  bookingCard: {
+    borderWidth: 1,
+    borderColor: "#D8D8D0",
+    borderRadius: 8,
+    padding: 16,
+    backgroundColor: "#FFF",
+    marginBottom: 8,
+  },
+  bookingHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  statusBadge: {
+    paddingVertical: 2,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+  },
+  statusPending: {
+    backgroundColor: "#222",
+  },
+  statusConfirmed: {
+    backgroundColor: "#BFFF00",
+  },
+  statusCompleted: {
+    backgroundColor: "#E0E0DC",
+  },
+  statusCancelled: {
+    backgroundColor: "#FFD6D6",
+  },
+  statusText: {
+    fontFamily: "Orbit_400Regular",
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#FFF",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  statusTextDark: {
+    color: "#111",
+  },
+  bookingTime: {
+    fontFamily: "Orbit_400Regular",
+    fontSize: 11,
+    color: "#111",
+    opacity: 0.4,
+  },
+  bookingProblem: {
+    fontFamily: "Orbit_400Regular",
+    fontSize: 14,
+    color: "#111",
+    lineHeight: 22,
   },
 });
