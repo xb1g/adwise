@@ -12,7 +12,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { problemText, seekerId } = await req.json();
+    const { problemText } = await req.json();
 
     if (!problemText || problemText.trim().length < 10) {
       return new Response(JSON.stringify({ error: "problemText too short" }), {
@@ -96,15 +96,6 @@ Rules:
     const raw = data.choices[0].message.content;
     const cleaned = raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
     const { matches } = JSON.parse(cleaned);
-
-    // Save match result if seekerId provided
-    if (seekerId) {
-      await supabase.from("matches").insert({
-        seeker_id: seekerId,
-        problem_text: problemText,
-        result: matches,
-      });
-    }
 
     return new Response(JSON.stringify({ matches }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
