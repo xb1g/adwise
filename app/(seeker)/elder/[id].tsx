@@ -9,6 +9,32 @@ const PLATFORM_FEE_PERCENT = 10;
 const ELDER_PAYOUT_PERCENT = 100 - PLATFORM_FEE_PERCENT;
 const ELDER_PAYOUT = BOOKING_PRICE * (ELDER_PAYOUT_PERCENT / 100);
 
+async function ensureSeekerProfileName(userId: string, fallbackName: string | null | undefined) {
+  const trimmedName = fallbackName?.trim();
+  if (!trimmedName) return;
+
+  try {
+    const { data: existingProfile, error: existingError } = await supabase
+      .from("seeker_profiles")
+      .select("name")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (existingError) {
+      console.error("[elder detail] check seeker profile failed:", existingError);
+      return;
+    }
+
+    if (existingProfile?.name?.trim()) return;
+
+    await supabase
+      .from("seeker_profiles")
+      .upsert({ user_id: userId, name: trimmedName }, { onConflict: "user_id" });
+  } catch (err) {
+    console.error("[elder detail] ensure seeker profile name failed:", err);
+  }
+}
+
 export default function ElderDetail() {
   const { id, matchReason, bio, ageRange, lifeAreas, previewText, problemText, elderName } =
     useLocalSearchParams<{
@@ -37,6 +63,12 @@ export default function ElderDetail() {
     if (!user) return;
     setBooking(true);
     try {
+      const fallbackName =
+        user.user_metadata?.full_name ||
+        user.user_metadata?.name ||
+        user.email?.split("@")[0];
+      await ensureSeekerProfileName(user.id, fallbackName);
+
       const { error } = await supabase.from("bookings").insert({
         elder_id: id,
         seeker_id: user.id,

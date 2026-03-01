@@ -16,7 +16,7 @@ type Situation = {
   problem_text: string;
   created_at: string;
   match_count: number;
-  top_elder_name: string;
+  elder_names: string[];
 };
 
 export default function SeekerMatchesTab() {
@@ -45,31 +45,33 @@ export default function SeekerMatchesTab() {
       return;
     }
 
-    // Collect top elder id per match to fetch name
-    const topElderIds: string[] = [];
+    // Collect all elder ids across all matches
+    const allElderIds = new Set<string>();
     for (const m of allMatches) {
       const results = (m.result ?? []) as Array<{ elder_id: string }>;
-      if (results.length > 0) topElderIds.push(results[0].elder_id);
+      results.forEach((r) => allElderIds.add(r.elder_id));
     }
 
-    const { data: profiles } = topElderIds.length > 0
+    const elderIdArr = Array.from(allElderIds);
+    const { data: profiles } = elderIdArr.length > 0
       ? await supabase
           .from("elder_profiles")
           .select("id, name")
-          .in("id", topElderIds)
+          .in("id", elderIdArr)
       : { data: [] };
 
     const built: Situation[] = allMatches.map((m) => {
       const results = (m.result ?? []) as Array<{ elder_id: string }>;
-      const topElderId = results[0]?.elder_id;
-      const topName = profiles?.find((p) => p.id === topElderId)?.name ?? "";
+      const names = results
+        .map((r) => profiles?.find((p) => p.id === r.elder_id)?.name ?? "")
+        .filter(Boolean);
 
       return {
         id: m.id,
         problem_text: m.problem_text ?? "",
         created_at: m.created_at,
         match_count: results.length,
-        top_elder_name: topName,
+        elder_names: names,
       };
     });
 
@@ -134,9 +136,9 @@ export default function SeekerMatchesTab() {
 
               <Text style={styles.cardProblem}>{shortProblem}</Text>
 
-              {s.top_elder_name ? (
-                <Text style={styles.cardTopMatch}>
-                  Top match: {s.top_elder_name}
+              {s.elder_names.length > 0 ? (
+                <Text style={styles.cardElders}>
+                  {s.elder_names.join(", ")}
                 </Text>
               ) : null}
 
@@ -251,11 +253,11 @@ const styles = StyleSheet.create({
     color: "#111",
     lineHeight: 24,
   },
-  cardTopMatch: {
+  cardElders: {
     fontFamily: "Orbit_400Regular",
     fontSize: 13,
-    color: "#555",
-    fontStyle: "italic",
+    color: "#111",
+    opacity: 0.7,
   },
   cardFooter: {
     flexDirection: "row",

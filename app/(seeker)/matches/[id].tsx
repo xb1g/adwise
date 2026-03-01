@@ -24,6 +24,29 @@ type ElderCard = {
   preview_text: string;
 };
 
+async function ensureSeekerProfileName(userId: string, fallbackName: string | null | undefined) {
+  const trimmedName = fallbackName?.trim();
+  if (!trimmedName) return;
+
+  try {
+    const { data: existingProfile, error: existingError } =
+      await supabase.from("seeker_profiles").select("name").eq("user_id", userId).maybeSingle();
+
+    if (existingError) {
+      console.error("[match detail] check seeker profile failed:", existingError);
+      return;
+    }
+
+    if (existingProfile?.name?.trim()) return;
+
+    await supabase
+      .from("seeker_profiles")
+      .upsert({ user_id: userId, name: trimmedName }, { onConflict: "user_id" });
+  } catch (err) {
+    console.error("[match detail] ensure seeker profile name failed:", err);
+  }
+}
+
 export default function MatchDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
@@ -97,8 +120,14 @@ export default function MatchDetail() {
 
   async function handleBook(card: ElderCard) {
     if (!user) return;
+    const fallbackName =
+      user.user_metadata?.full_name ||
+      user.user_metadata?.name ||
+      user.email?.split("@")[0];
+
     setBookingId(card.elder_id);
     try {
+      await ensureSeekerProfileName(user.id, fallbackName);
       const { error } = await supabase.from("bookings").insert({
         elder_id: card.elder_id,
         seeker_id: user.id,

@@ -23,6 +23,7 @@ type Story = {
   wisdom_snippets: string[];
   life_areas: string[];
   created_at: string;
+  audio_url: string | null;
   status: "processing" | "published";
 };
 
@@ -39,18 +40,35 @@ function formatDate(iso: string): string {
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-function StoryCard({ story }: { story: Story }) {
+function StoryCard({
+  story,
+}: {
+  story: Story;
+}) {
   const firstSnippet = story.wisdom_snippets?.[0] ?? null;
 
   return (
-    <View style={styles.card}>
+    <Pressable
+      style={styles.card}
+      onPress={() => {
+        console.log("[stories] navigating to story-player, id:", story.id);
+        router.push({ pathname: "/(elder)/story-player", params: { id: story.id } });
+      }}
+    >
       <View style={styles.cardHeader}>
         <Text style={styles.cardDate}>{formatDate(story.created_at)}</Text>
-        {story.status === "processing" && (
-          <View style={styles.processingBadge}>
-            <Text style={styles.processingText}>processing</Text>
-          </View>
-        )}
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          {story.audio_url ? (
+            <View style={styles.playBtn}>
+              <Text style={styles.playBtnText}>▶</Text>
+            </View>
+          ) : null}
+          {story.status === "processing" && (
+            <View style={styles.processingBadge}>
+              <Text style={styles.processingText}>processing</Text>
+            </View>
+          )}
+        </View>
       </View>
 
       {story.preview_text ? (
@@ -74,7 +92,7 @@ function StoryCard({ story }: { story: Story }) {
           ))}
         </View>
       ) : null}
-    </View>
+    </Pressable>
   );
 }
 
@@ -221,7 +239,7 @@ export default function MyStories() {
 
     const { data: storiesData } = await supabase
       .from("stories")
-      .select("id, elder_id, preview_text, wisdom_snippets, life_areas, created_at, status")
+      .select("id, elder_id, preview_text, wisdom_snippets, life_areas, created_at, status, audio_url")
       .eq("elder_id", profileData.id)
       .order("created_at", { ascending: false });
 
@@ -412,7 +430,10 @@ export default function MyStories() {
       ) : (
         <View style={styles.list}>
           {stories.map((story) => (
-            <StoryCard key={story.id} story={story} />
+            <StoryCard
+              key={story.id}
+              story={story}
+            />
           ))}
         </View>
       )}
@@ -526,6 +547,20 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#111",
     fontWeight: "900",
+  },
+
+  // Play button
+  playBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#111",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  playBtnText: {
+    fontSize: 14,
+    color: "#BFFF00",
   },
 
   emptyState: { alignItems: "center", marginTop: 40, gap: 28 },

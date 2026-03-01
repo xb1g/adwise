@@ -24,6 +24,29 @@ const PROBLEM_PROMPTS = [
   "Recovering from failure",
 ];
 
+async function ensureSeekerProfileName(userId: string, name: string) {
+  const trimmedName = name.trim();
+  if (!trimmedName) return;
+
+  try {
+    const { data: existingProfile, error: existingError } =
+      await supabase.from("seeker_profiles").select("name").eq("user_id", userId).maybeSingle();
+
+    if (existingError) {
+      console.error("[problem] check seeker profile failed:", existingError);
+      return;
+    }
+
+    if (existingProfile?.name?.trim()) return;
+
+    await supabase
+      .from("seeker_profiles")
+      .upsert({ user_id: userId, name: trimmedName }, { onConflict: "user_id" });
+  } catch (err) {
+    console.error("[problem] ensure seeker profile name failed:", err);
+  }
+}
+
 export default function ProblemScreen() {
   const { user } = useAuth();
   const [name, setName] = useState("");
@@ -89,12 +112,14 @@ export default function ProblemScreen() {
           await supabase
             .from("wisdom_users")
             .upsert({ user_id: userId, role: "seeker", name: name.trim() }, { onConflict: "user_id" });
+          await ensureSeekerProfileName(userId, name);
         }
       } else {
         await supabase
           .from("wisdom_users")
           .update({ name: name.trim() })
           .eq("user_id", userId);
+        await ensureSeekerProfileName(userId, name);
       }
 
       let matches: MatchResult[];

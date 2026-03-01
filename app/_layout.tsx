@@ -10,11 +10,12 @@ import { ElevenLabsProvider } from "@elevenlabs/react-native";
 //   (elder)/setup  → /setup      (elder)/home → /home
 //   (seeker)/onboarding → /onboarding
 //   (seeker)/(tabs)/feed → /feed   (seeker)/(tabs)/profile → /profile
-const ELDER_PAGES = new Set(["/home", "/setup", "/profile", "/requests", "/sessions", "/stories", "/record"]);
+const ELDER_PAGES = new Set(["/home", "/setup", "/profile", "/requests", "/sessions", "/stories", "/record", "/story-player"]);
 
 function isSeekerPage(pathname: string) {
   return ["/feed", "/matches", "/profile", "/problem", "/onboarding"].includes(pathname) ||
-    pathname.startsWith("/elder/");
+    pathname.startsWith("/elder/") ||
+    pathname.startsWith("/matches/");
 }
 
 function RootNavigator() {

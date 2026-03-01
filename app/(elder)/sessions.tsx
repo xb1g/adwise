@@ -19,6 +19,20 @@ type Booking = {
   match_reason: string;
   status: "pending" | "confirmed" | "completed" | "cancelled";
   created_at: string;
+  seeker_name: string | null;
+  seeker_age_range: string | null;
+  seeker_categories: string[];
+  seeker_problem_text: string | null;
+  seeker_onboarding_done: boolean | null;
+};
+
+type SeekerProfile = {
+  user_id: string;
+  name: string | null;
+  age_range: string | null;
+  categories: string[] | null;
+  problem_text: string | null;
+  onboarding_done: boolean | null;
 };
 
 function formatDate(iso: string): string {
@@ -56,12 +70,48 @@ function StatusBadge({ status }: { status: Booking["status"] }) {
 }
 
 function BookingCard({ booking }: { booking: Booking }) {
+  const onboardingLabel =
+    booking.seeker_onboarding_done === null
+      ? null
+      : booking.seeker_onboarding_done
+        ? "Onboarded"
+        : "Not onboarded";
+  const hasProfileMetadata =
+    booking.seeker_name !== null ||
+    booking.seeker_age_range !== null ||
+    booking.seeker_categories.length > 0 ||
+    booking.seeker_problem_text !== null ||
+    booking.seeker_onboarding_done !== null;
+  const displayName = booking.seeker_name?.trim() || "Seeker";
+
   return (
     <View style={styles.card}>
       <View style={styles.cardHeader}>
         <StatusBadge status={booking.status} />
         <Text style={styles.timestamp}>{formatDate(booking.created_at)}</Text>
       </View>
+
+      <Text style={styles.seekerText}>
+        {displayName}
+      </Text>
+      {hasProfileMetadata ? (
+        <Text style={styles.seekerMeta}>
+          {[
+            booking.seeker_age_range ? `Age ${booking.seeker_age_range}` : null,
+            onboardingLabel,
+            booking.seeker_categories.length > 0
+              ? `${booking.seeker_categories.join(", ")}`
+              : null,
+          ]
+            .filter(Boolean)
+            .join(" • ")}
+        </Text>
+      ) : null}
+      {booking.seeker_problem_text ? (
+        <Text style={styles.seekerProblemText} numberOfLines={2}>
+          {booking.seeker_problem_text}
+        </Text>
+      ) : null}
 
       <Text style={styles.problemText} numberOfLines={3}>
         {booking.problem_text}
@@ -71,7 +121,7 @@ function BookingCard({ booking }: { booking: Booking }) {
 
       <Text style={styles.matchLabel}>WHY YOU WERE MATCHED</Text>
       <Text style={styles.matchReason} numberOfLines={3}>
-        {booking.match_reason}
+        {booking.match_reason?.trim() ? booking.match_reason : "No match reason recorded."}
       </Text>
     </View>
   );
@@ -97,13 +147,46 @@ export default function MySessions() {
         return;
       }
 
-      const { data } = await supabase
+      const { data: bookingsData, error: bookingsError } = await supabase
         .from("bookings")
         .select("*")
         .eq("elder_id", profileData.id)
         .order("created_at", { ascending: false });
 
-      setBookings(data ?? []);
+      if (bookingsError) {
+        console.error("[sessions] fetch bookings error:", bookingsError);
+        setLoading(false);
+        return;
+      }
+
+      const seekerIds = Array.from(new Set((bookingsData ?? []).map((b) => b.seeker_id)));
+      const seekerById = new Map<string, SeekerProfile>();
+
+      if (seekerIds.length > 0) {
+        const { data: seekersData, error: seekersError } = await supabase
+          .from("seeker_profiles")
+          .select("user_id, name, age_range, categories, problem_text, onboarding_done")
+          .in("user_id", seekerIds);
+
+        if (seekersError) {
+          console.error("[sessions] fetch seeker profiles error:", seekersError);
+        } else {
+          seekersData?.forEach((s: SeekerProfile) => {
+            seekerById.set(s.user_id, s);
+          });
+        }
+      }
+
+      const enriched: Booking[] = (bookingsData ?? []).map((booking) => ({
+        ...booking,
+        seeker_name: seekerById.get(booking.seeker_id)?.name ?? null,
+        seeker_age_range: seekerById.get(booking.seeker_id)?.age_range ?? null,
+        seeker_categories: seekerById.get(booking.seeker_id)?.categories ?? [],
+        seeker_problem_text: seekerById.get(booking.seeker_id)?.problem_text ?? null,
+        seeker_onboarding_done: seekerById.get(booking.seeker_id)?.onboarding_done ?? null,
+      }));
+
+      setBookings(enriched);
       setLoading(false);
     }
 
@@ -239,6 +322,25 @@ const styles = StyleSheet.create({
     color: "#111",
     fontWeight: "900",
     lineHeight: 30,
+  },
+  seekerText: {
+    fontFamily: "Orbit_400Regular",
+    fontSize: 12,
+    color: "#111",
+    fontWeight: "900",
+    letterSpacing: 1,
+  },
+  seekerMeta: {
+    fontFamily: "Orbit_400Regular",
+    fontSize: 11,
+    color: "#555",
+    letterSpacing: 0.7,
+  },
+  seekerProblemText: {
+    fontFamily: "Orbit_400Regular",
+    fontSize: 12,
+    color: "#444",
+    lineHeight: 20,
   },
 
   divider: {

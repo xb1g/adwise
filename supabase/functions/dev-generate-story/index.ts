@@ -65,11 +65,20 @@ Elder profile:
 - Key topics: ${(profile.key_topics ?? []).join(", ")}
 - Wisdom summary: ${profile.wisdom_summary ?? ""}
 
+IMPORTANT: Do NOT just restate the bio. Instead, imagine a SPECIFIC real episode from this person's life — a vivid moment, a turning point, a lesson learned the hard way. Think about:
+- A specific day or season something changed for them
+- A conversation that stuck with them for years
+- A mistake they made and what it taught them
+- A relationship that shaped who they became
+- A cultural clash, a surprise, a moment of doubt or clarity
+- The unglamorous parts: loneliness, confusion, second-guessing
+- Small details: what they saw, heard, felt, smelled in that moment
+
 Generate a story this elder might tell, as if they spoke it aloud in a voice recording. Then extract structure from it.
 
 Return ONLY valid JSON (no markdown, no explanation):
 {
-  "transcript": "3-5 paragraphs of natural, first-person spoken story from this elder. Conversational, personal, a bit rambling — like a real voice recording.",
+  "transcript": "3-5 paragraphs of natural, first-person spoken story from this elder. Conversational, personal, a bit rambling — like a real voice recording. Include pauses ('you know...', 'and I remember thinking...'), specific details (names of places, seasons, feelings), and the messy reality of the experience. NOT a polished essay — a human talking.",
   "life_areas": [2-4 items from: ${LIFE_AREA_OPTIONS.join(", ")}],
   "key_topics": [3-5 short topic phrases from the story],
   "wisdom_snippets": [3 quotable 1-sentence insights from the elder's experience],
@@ -77,7 +86,7 @@ Return ONLY valid JSON (no markdown, no explanation):
   "tags": [4-6 lowercase keyword tags]
 }
 
-Make the story feel authentic to this specific elder's background. Vary the topic from their existing bio — dig into a specific episode or lesson.`;
+Make the story feel like something you'd overhear at a kitchen table late at night — raw, specific, and real.`;
 
     const response = await fetch("https://api.mistral.ai/v1/chat/completions", {
       method: "POST",
@@ -88,7 +97,7 @@ Make the story feel authentic to this specific elder's background. Vary the topi
       body: JSON.stringify({
         model: "mistral-small-latest",
         messages: [{ role: "user", content: prompt }],
-        temperature: 0.9,
+        temperature: 0.95,
       }),
     });
 
@@ -109,7 +118,7 @@ Make the story feel authentic to this specific elder's background. Vary the topi
         // Use a default voice; trim transcript to TTS limit
         const ttsText = structured.transcript.slice(0, 4500);
         const ttsRes = await fetch(
-          "https://api.elevenlabs.io/v1/text-to-speech/21m00Tcm4TlvDq8ikWAM",
+          "https://api.elevenlabs.io/v1/text-to-speech/L1aJrPa7pLJEyYlh3Ilq",
           {
             method: "POST",
             headers: {

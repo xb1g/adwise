@@ -31,6 +31,14 @@
         "android.permission.MODIFY_AUDIO_SETTINGS",
         "android.permission.SYSTEM_ALERT_WINDOW",
         "android.permission.WAKE_LOCK",
+        "android.permission.BLUETOOTH",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.ACCESS_NETWORK_STATE",
+        "android.permission.CAMERA",
+        "android.permission.INTERNET",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.WAKE_LOCK",
         "android.permission.BLUETOOTH"
       ],
       "adaptiveIcon": {
@@ -57,7 +65,6 @@
           "microphonePermission": "Allow $(PRODUCT_NAME) to access your microphone."
         }
       ],
-
       [
         "expo-web-browser",
         {
@@ -70,6 +77,12 @@
       "eas": {
         "projectId": "972f4525-ae26-4870-87e5-a5a16324f294"
       }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/972f4525-ae26-4870-87e5-a5a16324f294"
     }
   }
 }

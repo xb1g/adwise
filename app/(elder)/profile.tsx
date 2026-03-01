@@ -181,7 +181,7 @@ export default function ElderProfile() {
   }
 
   return (
-    <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
+    <View style={styles.page}>
       <Pressable
         style={styles.backBtn}
         onPress={() => router.replace("/(elder)/home")}
@@ -193,130 +193,132 @@ export default function ElderProfile() {
         <Text style={styles.backBtnText}>🏠</Text>
       </Pressable>
 
-      <Text style={styles.title}>My Profile</Text>
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
+        <Text style={styles.title}>My Profile</Text>
 
-      <View style={styles.statsBlock}>
-        <View style={styles.statCard}>
-          <Text style={styles.statValue} accessibilityRole="text">
-            {statsLoading ? "…" : stats.storiesCount}
-          </Text>
-          <Text style={styles.statLabel}>Stories</Text>
+        <View style={styles.statsBlock}>
+          <View style={styles.statCard}>
+            <Text style={styles.statValue} accessibilityRole="text">
+              {statsLoading ? "…" : stats.storiesCount}
+            </Text>
+            <Text style={styles.statLabel}>Stories</Text>
+          </View>
+          <View style={styles.statCard}>
+            <Text style={styles.statValue} accessibilityRole="text">
+              {statsLoading ? "…" : stats.peopleHelpedCount}
+            </Text>
+            <Text style={styles.statLabel}>People helped</Text>
+          </View>
         </View>
-        <View style={styles.statCard}>
-          <Text style={styles.statValue} accessibilityRole="text">
-            {statsLoading ? "…" : stats.peopleHelpedCount}
-          </Text>
-          <Text style={styles.statLabel}>People helped</Text>
-        </View>
-      </View>
 
-      <View style={styles.section}>
-        <Text style={styles.label}>Name</Text>
-        {isEditingName ? (
-          <View>
-            <TextInput
-              style={[styles.nameInput, savingName && styles.nameInputDisabled]}
-              value={editedName}
-              onChangeText={setEditedName}
-              placeholder="Enter your name"
-              placeholderTextColor="#888"
-              autoCapitalize="words"
-            />
-            <View style={styles.nameActions}>
+        <View style={styles.section}>
+          <Text style={styles.label}>Name</Text>
+          {isEditingName ? (
+            <View>
+              <TextInput
+                style={[styles.nameInput, savingName && styles.nameInputDisabled]}
+                value={editedName}
+                onChangeText={setEditedName}
+                placeholder="Enter your name"
+                placeholderTextColor="#888"
+                autoCapitalize="words"
+              />
+              <View style={styles.nameActions}>
+                <Pressable
+                  style={[styles.saveBtn, (savingName || !editedName.trim()) && styles.btnDisabled]}
+                  onPress={handleSaveName}
+                  disabled={savingName || !editedName.trim()}
+                >
+                  {savingName ? (
+                    <ActivityIndicator color="#111" />
+                  ) : (
+                    <Text style={styles.saveBtnText}>Save</Text>
+                  )}
+                </Pressable>
+                <Pressable style={styles.cancelBtn} onPress={resetEditedName} disabled={savingName}>
+                  <Text style={styles.cancelBtnText}>Cancel</Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : (
+            <View style={styles.nameRow}>
+              {profile.name ? <Text style={styles.value}>{profile.name}</Text> : <Text style={styles.emptyText}>No name set</Text>}
               <Pressable
-                style={[styles.saveBtn, (savingName || !editedName.trim()) && styles.btnDisabled]}
-                onPress={handleSaveName}
-                disabled={savingName || !editedName.trim()}
+                onPress={() => setIsEditingName(true)}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Edit name"
+                accessibilityHint="Opens name editing field"
               >
-                {savingName ? (
-                  <ActivityIndicator color="#111" />
-                ) : (
-                  <Text style={styles.saveBtnText}>Save</Text>
-                )}
-              </Pressable>
-              <Pressable style={styles.cancelBtn} onPress={resetEditedName} disabled={savingName}>
-                <Text style={styles.cancelBtnText}>Cancel</Text>
+                <Text style={styles.editLink}>✏️</Text>
               </Pressable>
             </View>
+          )}
+        </View>
+
+        {user?.email ? (
+          <View style={styles.section}>
+            <Text style={styles.label}>Email</Text>
+            <Text style={styles.value}>{user.email}</Text>
           </View>
-        ) : (
-          <View style={styles.nameRow}>
-            {profile.name ? <Text style={styles.value}>{profile.name}</Text> : <Text style={styles.emptyText}>No name set</Text>}
-            <Pressable
-              onPress={() => setIsEditingName(true)}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel="Edit name"
-              accessibilityHint="Opens name editing field"
-            >
-              <Text style={styles.editLink}>✏️</Text>
-            </Pressable>
+        ) : null}
+
+        {profile.age_range ? (
+          <View style={styles.section}>
+            <Text style={styles.label}>Age</Text>
+            <Text style={styles.value}>{profile.age_range}</Text>
           </View>
+        ) : null}
+
+        {profile.bio ? (
+          <View style={styles.bioCard}>
+            <Text style={styles.label}>About you</Text>
+            <Text style={styles.bio}>{profile.bio}</Text>
+          </View>
+        ) : null}
+
+        {profile.life_areas.length > 0 ? (
+          <View style={styles.section}>
+            <Text style={styles.label}>Life areas</Text>
+            <View style={styles.chipRow}>
+              {profile.life_areas.map((a) => (
+                <View key={a} style={styles.chip}>
+                  <Text style={styles.chipText}>{a}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        ) : null}
+
+        {!profile.bio && profile.life_areas.length === 0 && !profile.age_range && (
+          <Text style={styles.emptyHint}>
+            Your guide didn't save any details yet. Try the conversation again.
+          </Text>
         )}
-      </View>
 
-      {user?.email ? (
-        <View style={styles.section}>
-          <Text style={styles.label}>Email</Text>
-          <Text style={styles.value}>{user.email}</Text>
-        </View>
-      ) : null}
+        <Pressable style={styles.signOutBtn} onPress={handleSignOut}>
+          <Text style={styles.signOutText}>Sign out</Text>
+        </Pressable>
 
-      {profile.age_range ? (
-        <View style={styles.section}>
-          <Text style={styles.label}>Age</Text>
-          <Text style={styles.value}>{profile.age_range}</Text>
-        </View>
-      ) : null}
+        <Pressable style={styles.changeBtn} onPress={handleChangeChoice}>
+          <Text style={styles.changeBtnText}>Change your choice</Text>
+        </Pressable>
 
-      {profile.bio ? (
-        <View style={styles.bioCard}>
-          <Text style={styles.label}>About you</Text>
-          <Text style={styles.bio}>{profile.bio}</Text>
-        </View>
-      ) : null}
-
-      {profile.life_areas.length > 0 ? (
-        <View style={styles.section}>
-          <Text style={styles.label}>Life areas</Text>
-          <View style={styles.chipRow}>
-            {profile.life_areas.map((a) => (
-              <View key={a} style={styles.chip}>
-                <Text style={styles.chipText}>{a}</Text>
-              </View>
-            ))}
-          </View>
-        </View>
-      ) : null}
-
-      {!profile.bio && profile.life_areas.length === 0 && !profile.age_range && (
-        <Text style={styles.emptyHint}>
-          Your guide didn't save any details yet. Try the conversation again.
-        </Text>
-      )}
-
-      <Pressable style={styles.signOutBtn} onPress={handleSignOut}>
-        <Text style={styles.signOutText}>Sign out</Text>
-      </Pressable>
-
-      <Pressable style={styles.changeBtn} onPress={handleChangeChoice}>
-        <Text style={styles.changeBtnText}>Change your choice</Text>
-      </Pressable>
-
-      <Pressable style={styles.deleteBtn} onPress={handleDeleteAccount}>
-        <Text style={styles.deleteBtnText}>Delete account (dev)</Text>
-      </Pressable>
-    </ScrollView>
+        <Pressable style={styles.deleteBtn} onPress={handleDeleteAccount}>
+          <Text style={styles.deleteBtnText}>Delete account (dev)</Text>
+        </Pressable>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  page: { flex: 1, backgroundColor: "#FDFFF5" },
   scroll: { flex: 1, backgroundColor: "#FDFFF5" },
-  container: { paddingTop: 60, paddingHorizontal: 24, paddingBottom: 60, gap: 28 },
+  container: { paddingTop: 108, paddingHorizontal: 24, paddingBottom: 60, gap: 28 },
   center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#FDFFF5" },
 
   backBtn: {
-    marginBottom: 8,
     width: 56,
     height: 56,
     borderWidth: 1.5,
@@ -324,7 +326,11 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     alignItems: "center",
     justifyContent: "center",
-    alignSelf: "flex-start",
+    position: "absolute",
+    top: 50,
+    left: 24,
+    zIndex: 5,
+    elevation: 5,
   },
   backBtnText: { fontSize: 30, color: "#111" },
 

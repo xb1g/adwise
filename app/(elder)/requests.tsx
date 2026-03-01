@@ -13,12 +13,25 @@ import { supabase } from "../../lib/supabase";
 
 type ElderRequest = {
   id: string;
-  elder_id: string;
   seeker_id: string;
   problem_text: string;
   match_reason: string;
   rank: number;
   created_at: string;
+  seeker_name: string | null;
+  seeker_age_range: string | null;
+  seeker_categories: string[];
+  seeker_problem_text: string | null;
+  seeker_onboarding_done: boolean | null;
+};
+
+type SeekerProfile = {
+  user_id: string;
+  name: string | null;
+  age_range: string | null;
+  categories: string[] | null;
+  problem_text: string | null;
+  onboarding_done: boolean | null;
 };
 
 function formatDate(iso: string): string {
@@ -34,6 +47,19 @@ function formatDate(iso: string): string {
 
 function RequestCard({ request }: { request: ElderRequest }) {
   const isTopRank = request.rank === 1;
+  const onboardingLabel =
+    request.seeker_onboarding_done === null
+      ? null
+      : request.seeker_onboarding_done
+        ? "Onboarded"
+        : "Not onboarded";
+  const hasProfileMetadata =
+    request.seeker_name !== null ||
+    request.seeker_age_range !== null ||
+    request.seeker_categories.length > 0 ||
+    request.seeker_problem_text !== null ||
+    request.seeker_onboarding_done !== null;
+  const displayName = request.seeker_name?.trim() || "Seeker";
 
   return (
     <View style={styles.card}>
@@ -46,15 +72,36 @@ function RequestCard({ request }: { request: ElderRequest }) {
         <Text style={styles.timestamp}>{formatDate(request.created_at)}</Text>
       </View>
 
+      <Text style={styles.seekerText}>
+        {displayName}
+      </Text>
+      {hasProfileMetadata ? (
+        <Text style={styles.seekerMeta}>
+          {[
+            request.seeker_age_range ? `Age ${request.seeker_age_range}` : null,
+            onboardingLabel,
+            request.seeker_categories.length > 0
+              ? `${request.seeker_categories.join(", ")}`
+              : null,
+          ]
+            .filter(Boolean)
+            .join(" • ")}
+        </Text>
+      ) : null}
+      {request.seeker_problem_text ? (
+        <Text style={styles.seekerProblemText} numberOfLines={2}>
+          {request.seeker_problem_text}
+        </Text>
+      ) : null}
       <Text style={styles.problemText} numberOfLines={3}>
         {request.problem_text}
       </Text>
 
       <View style={styles.divider} />
 
-      <Text style={styles.matchLabel}>WHY YOU MATCHED</Text>
+      <Text style={styles.matchLabel}>WHY YOU WERE MATCHED</Text>
       <Text style={styles.matchReason} numberOfLines={3}>
-        {request.match_reason}
+        {request.match_reason?.trim() ? request.match_reason : "No match reason recorded."}
       </Text>
     </View>
   );
@@ -80,13 +127,47 @@ export default function WisdomRequests() {
         return;
       }
 
-      const { data } = await supabase
+      const { data: requestsData, error: requestsError } = await supabase
         .from("elder_requests")
-        .select("*")
+        .select("id, seeker_id, problem_text, match_reason, rank, created_at")
         .eq("elder_id", profileData.id)
         .order("created_at", { ascending: false });
 
-      setRequests(data ?? []);
+      if (requestsError) {
+        console.error("[requests] fetch elder requests error:", requestsError);
+        setLoading(false);
+        return;
+      }
+
+      const seekerIds = Array.from(new Set((requestsData ?? []).map((r) => r.seeker_id)));
+      const seekerById = new Map<string, SeekerProfile>();
+
+      if (seekerIds.length > 0) {
+        const { data: seekersData, error: seekersError } = await supabase
+          .from("seeker_profiles")
+          .select("user_id, name, age_range, categories, problem_text, onboarding_done")
+          .in("user_id", seekerIds);
+
+        if (seekersError) {
+          console.error("[requests] fetch seeker names error:", seekersError);
+        } else {
+          seekersData?.forEach((s: SeekerProfile) => {
+            seekerById.set(s.user_id, s);
+          });
+        }
+      }
+
+      const enriched: ElderRequest[] = (requestsData ?? []).map((r) => ({
+        ...r,
+        rank: r.rank,
+        seeker_name: seekerById.get(r.seeker_id)?.name ?? null,
+        seeker_age_range: seekerById.get(r.seeker_id)?.age_range ?? null,
+        seeker_categories: seekerById.get(r.seeker_id)?.categories ?? [],
+        seeker_problem_text: seekerById.get(r.seeker_id)?.problem_text ?? null,
+        seeker_onboarding_done: seekerById.get(r.seeker_id)?.onboarding_done ?? null,
+      }));
+
+      setRequests(enriched);
       setLoading(false);
     }
 
@@ -119,7 +200,7 @@ export default function WisdomRequests() {
       {requests.length === 0 ? (
         <View style={styles.emptyCard}>
           <Text style={styles.emptyText}>
-            No requests yet. When seekers match with you, they'll appear here.
+            No requests yet. When seekers match with you, they&apos;ll appear here.
           </Text>
         </View>
       ) : (
@@ -211,6 +292,25 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     lineHeight: 30,
   },
+  seekerText: {
+    fontFamily: "Orbit_400Regular",
+    fontSize: 12,
+    color: "#111",
+    fontWeight: "900",
+    letterSpacing: 1,
+  },
+  seekerMeta: {
+    fontFamily: "Orbit_400Regular",
+    fontSize: 11,
+    color: "#555",
+    letterSpacing: 0.7,
+  },
+  seekerProblemText: {
+    fontFamily: "Orbit_400Regular",
+    fontSize: 12,
+    color: "#444",
+    lineHeight: 20,
+  },
 
   divider: {
     height: 2,
@@ -233,7 +333,6 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
     lineHeight: 24,
   },
-
   emptyCard: {
     borderWidth: 2,
     borderColor: "#111",
