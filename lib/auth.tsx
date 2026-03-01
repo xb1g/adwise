@@ -1,6 +1,8 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { Session, User } from "@supabase/supabase-js";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as AuthSession from "expo-auth-session";
+import * as WebBrowser from "expo-web-browser";
 import { supabase } from "./supabase";
 
 export type WisdomRole = "elder" | "seeker" | null;
@@ -27,6 +29,8 @@ type AuthContext = {
   refreshProfile: () => Promise<void>;
   refreshRole: () => Promise<void>;
   signInAnonymously: () => Promise<void>;
+  signInWithGoogle: () => Promise<void>;
+  signOut: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContext>({
@@ -40,6 +44,8 @@ const AuthContext = createContext<AuthContext>({
   refreshProfile: async () => {},
   refreshRole: async () => {},
   signInAnonymously: async () => {},
+  signInWithGoogle: async () => {},
+  signOut: async () => {},
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -128,6 +134,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (data.session) setSession(data.session);
   };
 
+  const signInWithGoogle = async () => {
+    const redirectUrl = AuthSession.makeRedirectUri({ scheme: "com.bunyasit.adwise" });
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: redirectUrl, skipBrowserRedirect: true },
+    });
+    if (error) throw error;
+    if (!data.url) return;
+    const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
+    if (result.type === "success") {
+      const { error: exchangeError } =
+        await supabase.auth.exchangeCodeForSession(result.url);
+      if (exchangeError) throw exchangeError;
+    }
+  };
+
+  const signOut = async () => {
+    await supabase.auth.signOut();
+    setSession(null);
+    setProfile(null);
+    setRole(null);
+    try {
+      await AsyncStorage.removeItem(ROLE_CACHE_KEY);
+    } catch {}
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -141,6 +173,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         refreshProfile,
         refreshRole,
         signInAnonymously,
+        signInWithGoogle,
+        signOut,
       }}
     >
       {children}

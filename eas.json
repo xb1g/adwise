@@ -1,6 +1,8 @@
 {
   "build": {
     "development": {
+      "developmentClient": true,
+      "distribution": "internal",
       "android": {},
       "ios": {}
     },
@@ -12,6 +14,8 @@
       "ios": {}
     },
     "simulator": {
+      "developmentClient": true,
+      "distribution": "internal",
       "ios": {
         "simulator": true
       }

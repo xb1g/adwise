@@ -6,9 +6,9 @@ import {
   StyleSheet,
   Animated,
   ScrollView,
-  SafeAreaView,
   ActivityIndicator,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { useConversation } from "@elevenlabs/react-native";
 import { useAuth } from "../../lib/auth";

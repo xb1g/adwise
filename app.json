@@ -52,6 +52,13 @@
       "expo-router",
       "expo-sqlite",
       [
+        "expo-audio",
+        {
+          "microphonePermission": "Allow $(PRODUCT_NAME) to access your microphone."
+        }
+      ],
+
+      [
         "expo-web-browser",
         {
           "experimentalLauncherActivity": false

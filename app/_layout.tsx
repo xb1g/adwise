@@ -43,29 +43,35 @@ function RootNavigator() {
     if (pathname === "/(seeker)/problem") return;
 
     if (!session) {
-      router.replace("/");
+      if (pathname !== "/" && pathname !== "/sign-in") router.replace("/");
     } else if (!role) {
-      router.replace("/");
+      // Guard against race conditions where role is transiently null during
+      // sign-in (onAuthStateChange fires before wisdom_users upsert completes).
+      // If already in a role-specific route, wait for the role to load properly.
+      if (!pathname.startsWith("/(seeker)") && !pathname.startsWith("/(elder)") && pathname !== "/" && pathname !== "/sign-in") {
+        router.replace("/");
+      }
     } else if (role === "elder") {
       if (elderOnboardingDone === null) return;
       if (elderOnboardingDone) {
-        router.replace("/(elder)/home");
+        if (pathname !== "/(elder)/home") router.replace("/(elder)/home");
       } else {
-        router.replace("/(elder)/setup");
+        if (pathname !== "/(elder)/setup") router.replace("/(elder)/setup");
       }
     } else if (role === "seeker") {
       if (seekerOnboardingDone === null) return;
       if (seekerOnboardingDone) {
-        router.replace("/(seeker)/(tabs)/feed");
+        if (pathname !== "/(seeker)/(tabs)/feed") router.replace("/(seeker)/(tabs)/feed");
       } else {
-        router.replace("/(seeker)/onboarding");
+        if (pathname !== "/(seeker)/onboarding") router.replace("/(seeker)/onboarding");
       }
     }
-  }, [session, loading, role, roleLoading, elderOnboardingDone, seekerOnboardingDone]);
+  }, [session, loading, role, roleLoading, elderOnboardingDone, seekerOnboardingDone, pathname]);
 
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="index" />
+      <Stack.Screen name="sign-in" />
       <Stack.Screen name="(elder)" />
       <Stack.Screen name="(seeker)" />
       <Stack.Screen name="(tabs)" />

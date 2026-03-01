@@ -5,76 +5,33 @@ import {
   Text,
   View,
   ActivityIndicator,
-  SafeAreaView,
   ScrollView,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
-import { router } from "expo-router";
 import { useAuth } from "../lib/auth";
 import { supabase } from "../lib/supabase";
 
-type RoleHandling = "elder" | "seeker" | null;
-
 export default function Page() {
-  const { user, role, refreshRole } = useAuth();
-  const [handleRole, setHandleRole] = useState<RoleHandling>(null);
+  const { signInWithGoogle, refreshRole } = useAuth();
+  const [handleRole, setHandleRole] = useState<"elder" | "seeker" | null>(null);
 
   const onSelectRole = async (selected: "elder" | "seeker") => {
     setHandleRole(selected);
     try {
-      // Seekers go through their own onboarding first
-      if (selected === "seeker") {
-        let currentUserId = user?.id;
-        if (!currentUserId) {
-          const { data, error } = await supabase.auth.signInAnonymously();
-          if (error) throw error;
-          currentUserId = data.session?.user.id;
-        }
-        if (currentUserId) {
-          await supabase
-            .from("wisdom_users")
-            .upsert({ user_id: currentUserId, role: "seeker" }, { onConflict: "user_id" });
-          await refreshRole();
-        }
-        router.replace("/(seeker)/onboarding");
-        return;
-      }
-
-      // Elders sign up immediately so they can set up their profile
-      if (user && role === selected) {
-        navigateForRole(selected);
-        return;
-      }
-
-      let currentUserId = user?.id;
-
-      if (!currentUserId) {
-        const { data, error } = await supabase.auth.signInAnonymously();
-        if (error) throw error;
-        currentUserId = data.session?.user.id;
-      }
-
-      if (currentUserId) {
-        const { error: upsertError } = await supabase
+      await signInWithGoogle();
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user?.id) {
+        await supabase
           .from("wisdom_users")
-          .upsert({ user_id: currentUserId, role: selected }, { onConflict: "user_id" });
-
-        if (upsertError) throw upsertError;
+          .upsert({ user_id: session.user.id, role: selected }, { onConflict: "user_id" });
         await refreshRole();
-        navigateForRole(selected);
+        // _layout.tsx navigates to onboarding once role + session are set
       }
     } catch (e) {
-      console.error("Error setting role:", e);
+      console.error("Sign-in failed:", e);
     } finally {
       setHandleRole(null);
-    }
-  };
-
-  const navigateForRole = (r: "elder" | "seeker") => {
-    if (r === "elder") {
-      router.replace("/(elder)/setup");
-    } else {
-      router.replace("/(seeker)/onboarding");
     }
   };
 
