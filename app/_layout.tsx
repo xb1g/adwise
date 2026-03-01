@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { AuthProvider, useAuth } from "../lib/auth";
 import { supabase } from "../lib/supabase";
 import { useLocalSearchParams } from "expo-router";
+import { ElevenLabsProvider } from "@elevenlabs/react-native";
 
 type WisdomRole = "elder" | "seeker" | null;
 
@@ -12,6 +13,7 @@ function RootNavigator() {
   const { noredirect } = useLocalSearchParams<{ noredirect?: string }>();
   const [role, setRole] = useState<WisdomRole>(null);
   const [roleLoading, setRoleLoading] = useState(false);
+  const [elderOnboardingDone, setElderOnboardingDone] = useState<boolean | null>(null);
 
   useEffect(() => {
     if (!session?.user?.id) return;
@@ -28,6 +30,20 @@ function RootNavigator() {
       });
   }, [session?.user?.id, profile?.onboarding_done]);
 
+  // Check elder onboarding status once role is known
+  useEffect(() => {
+    if (role !== "elder" || !session?.user?.id) return;
+
+    supabase
+      .from("elder_profiles")
+      .select("onboarding_done")
+      .eq("user_id", session.user.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        setElderOnboardingDone(data?.onboarding_done ?? false);
+      });
+  }, [role, session?.user?.id]);
+
   useEffect(() => {
     if (loading || roleLoading || profileLoading) return;
     if (noredirect === "1") return;
@@ -39,11 +55,16 @@ function RootNavigator() {
     } else if (!profile?.onboarding_done) {
       router.replace("/onboarding");
     } else if (role === "elder") {
-      router.replace("/(elder)/profile");
+      if (elderOnboardingDone === null) return; // still loading
+      if (elderOnboardingDone) {
+        router.replace("/(elder)/profile");
+      } else {
+        router.replace("/(elder)/setup");
+      }
     } else {
       router.replace("/(seeker)/problem");
     }
-  }, [session, loading, role, roleLoading, profile, profileLoading]);
+  }, [session, loading, role, roleLoading, profile, profileLoading, elderOnboardingDone]);
 
   return (
     <Stack screenOptions={{ headerShown: false }}>
@@ -64,10 +85,11 @@ export default function RootLayout() {
   if (!fontsLoaded) return null;
 
   return (
-    <AuthProvider>
-      <RootNavigator />
-    </AuthProvider>
+    <ElevenLabsProvider>
+      <AuthProvider>
+        <RootNavigator />
+      </AuthProvider>
+    </ElevenLabsProvider>
   );
 }
-
 

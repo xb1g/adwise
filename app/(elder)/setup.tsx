@@ -1,105 +1,218 @@
-import { useState } from "react";
-import { View, Text, Pressable, ScrollView, StyleSheet, ActivityIndicator } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { View, Text, Pressable, StyleSheet, Animated } from "react-native";
 import { router } from "expo-router";
+import { useConversation } from "@elevenlabs/react-native";
 import { useAuth } from "../../lib/auth";
 import { supabase } from "../../lib/supabase";
 
-const AGE_RANGES = ["50s", "60s", "70s", "80s+"] as const;
+const AGENT_ID = "agent_4601kjkqjm0de5z86ea0gmpxk1qw";
 
-const LIFE_AREA_OPTIONS = [
-  "career", "immigration", "startup", "marriage", "divorce",
-  "grief", "financial-recovery", "creativity", "identity",
-  "family", "health", "education", "reinvention",
-];
+type Status = "disconnected" | "connecting" | "connected";
 
-export default function ElderSetup() {
+export default function ElderVoiceOnboarding() {
   const { user } = useAuth();
-  const [ageRange, setAgeRange] = useState<string>("");
-  const [selectedAreas, setSelectedAreas] = useState<string[]>([]);
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const pulseRef = useRef<Animated.CompositeAnimation | null>(null);
+
+  // Track these explicitly via callbacks — reactive properties can lag in RN
+  const [status, setStatus] = useState<Status>("connecting");
+  const [isSpeaking, setIsSpeaking] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  function toggleArea(area: string) {
-    setSelectedAreas((prev) =>
-      prev.includes(area) ? prev.filter((a) => a !== area) : [...prev, area]
-    );
-  }
+  const conversation = useConversation({
+    clientTools: {
+      // Called by the ElevenLabs agent when it has gathered enough info
+      complete_onboarding: async (params: {
+        age_range?: string;
+        life_areas?: string[];
+      }) => {
+        await finishOnboarding(params.age_range, params.life_areas);
+      },
+    },
+    onStatusChange: ({ status: s }: { status: Status }) => {
+      setStatus(s);
+    },
+    onModeChange: ({ mode }: { mode: "speaking" | "listening" }) => {
+      setIsSpeaking(mode === "speaking");
+    },
+    onConnect: ({ conversationId }: { conversationId: string }) => {
+      console.log("[elder-onboarding] connected", conversationId);
+    },
+    onDisconnect: () => {
+      console.log("[elder-onboarding] disconnected");
+    },
+    onError: (message: string) => {
+      console.error("[elder-onboarding] error:", message);
+    },
+  });
 
-  async function handleContinue() {
-    if (!ageRange || selectedAreas.length === 0 || !user) return;
+  // Pulse animation while AI is speaking
+  useEffect(() => {
+    pulseRef.current?.stop();
+    if (isSpeaking) {
+      pulseRef.current = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, { toValue: 1.3, duration: 600, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
+        ])
+      );
+      pulseRef.current.start();
+    } else {
+      Animated.spring(pulseAnim, { toValue: 1, useNativeDriver: true }).start();
+    }
+    return () => pulseRef.current?.stop();
+  }, [isSpeaking]);
+
+  // Auto-start on mount
+  useEffect(() => {
+    conversation.startSession({ agentId: AGENT_ID });
+    return () => { conversation.endSession(); };
+  }, []);
+
+  async function finishOnboarding(age_range?: string, life_areas?: string[]) {
+    if (!user || saving) return;
     setSaving(true);
-
-    const { error } = await supabase.from("elder_profiles").insert({
-      user_id: user.id,
-      age_range: ageRange,
-      life_areas: selectedAreas,
-      bio: "",
-      is_seeded: false,
-    });
-
+    const { error } = await supabase.from("elder_profiles").upsert(
+      {
+        user_id: user.id,
+        age_range: age_range ?? null,
+        life_areas: life_areas ?? [],
+        bio: "",
+        onboarding_done: true,
+        is_seeded: false,
+      },
+      { onConflict: "user_id" }
+    );
     setSaving(false);
-    if (!error) router.replace("/(elder)/record");
+    if (!error) router.replace("/(elder)/profile");
   }
 
-  const canContinue = ageRange !== "" && selectedAreas.length > 0;
+  function handleRepeat() {
+    if (status !== "connected") return;
+    conversation.sendUserMessage("Could you please repeat that?");
+  }
+
+  async function handleDone() {
+    if (status === "connected") await conversation.endSession();
+    finishOnboarding();
+  }
+
+  const isConnected = status === "connected";
 
   return (
-    <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
-      <Text style={styles.title}>Your story starts here</Text>
+    <View style={styles.container}>
+      {/* Status label */}
+      <Text style={styles.statusText}>
+        {status === "connecting"
+          ? "Connecting..."
+          : isSpeaking
+          ? "Speaking to you"
+          : "I'm listening..."}
+      </Text>
 
-      <Text style={styles.label}>How old are you?</Text>
-      <View style={styles.row}>
-        {AGE_RANGES.map((r) => (
-          <Pressable
-            key={r}
-            style={[styles.chip, ageRange === r && styles.chipSelected]}
-            onPress={() => setAgeRange(r)}
-          >
-            <Text style={[styles.chipText, ageRange === r && styles.chipTextSelected]}>{r}</Text>
-          </Pressable>
-        ))}
+      {/* Animated orb */}
+      <View style={styles.orbWrapper}>
+        <Animated.View
+          style={[styles.orbGlow, { transform: [{ scale: pulseAnim }] }]}
+        />
+        <View style={[styles.orbCore, isSpeaking && styles.orbCoreActive]} />
       </View>
 
-      <Text style={styles.label}>What have you lived through? (pick all that apply)</Text>
-      <View style={styles.row}>
-        {LIFE_AREA_OPTIONS.map((area) => (
-          <Pressable
-            key={area}
-            style={[styles.chip, selectedAreas.includes(area) && styles.chipSelected]}
-            onPress={() => toggleArea(area)}
-          >
-            <Text style={[styles.chipText, selectedAreas.includes(area) && styles.chipTextSelected]}>
-              {area}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
+      {/* Buttons */}
+      <View style={styles.btnGroup}>
+        <Pressable
+          style={[styles.repeatBtn, !isConnected && styles.btnDisabled]}
+          onPress={handleRepeat}
+          disabled={!isConnected}
+        >
+          <Text style={styles.repeatBtnText}>↺  Repeat</Text>
+        </Pressable>
 
-      <Pressable
-        style={[styles.btn, !canContinue && styles.btnDisabled]}
-        onPress={handleContinue}
-        disabled={!canContinue || saving}
-      >
-        {saving ? (
-          <ActivityIndicator color="#FDFFF5" />
-        ) : (
-          <Text style={styles.btnText}>Record my story →</Text>
-        )}
-      </Pressable>
-    </ScrollView>
+        <Pressable
+          style={[styles.doneBtn, (!isConnected || saving) && styles.btnDisabled]}
+          onPress={handleDone}
+          disabled={!isConnected || saving}
+        >
+          <Text style={styles.doneBtnText}>
+            {saving ? "Saving..." : "I'm Done"}
+          </Text>
+        </Pressable>
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  scroll: { flex: 1, backgroundColor: "#FDFFF5" },
-  container: { paddingTop: 80, paddingHorizontal: 24, paddingBottom: 48 },
-  title: { fontSize: 28, fontFamily: "Orbit_400Regular", color: "#111", marginBottom: 40 },
-  label: { fontSize: 14, fontFamily: "Orbit_400Regular", color: "#111", marginBottom: 12, marginTop: 24, opacity: 0.7 },
-  row: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  chip: { borderWidth: 1.5, borderColor: "#111", paddingVertical: 6, paddingHorizontal: 14 },
-  chipSelected: { backgroundColor: "#BFFF00", borderColor: "#BFFF00" },
-  chipText: { fontFamily: "Orbit_400Regular", fontSize: 13, color: "#111" },
-  chipTextSelected: { fontWeight: "700" },
-  btn: { backgroundColor: "#111", paddingVertical: 16, alignItems: "center", marginTop: 48 },
-  btnDisabled: { opacity: 0.3 },
-  btnText: { color: "#FDFFF5", fontFamily: "Orbit_400Regular", fontSize: 16, fontWeight: "700" },
+  container: {
+    flex: 1,
+    backgroundColor: "#FDFFF5",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingTop: 120,
+    paddingBottom: 80,
+    paddingHorizontal: 32,
+  },
+  statusText: {
+    fontFamily: "Orbit_400Regular",
+    fontSize: 30,
+    color: "#111",
+    textAlign: "center",
+    letterSpacing: 0.5,
+  },
+  orbWrapper: {
+    width: 240,
+    height: 240,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  orbGlow: {
+    position: "absolute",
+    width: 240,
+    height: 240,
+    borderRadius: 120,
+    backgroundColor: "#BFFF00",
+    opacity: 0.2,
+  },
+  orbCore: {
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    backgroundColor: "#111",
+  },
+  orbCoreActive: {
+    backgroundColor: "#BFFF00",
+  },
+  btnGroup: {
+    width: "100%",
+    gap: 16,
+  },
+  repeatBtn: {
+    backgroundColor: "#111",
+    paddingVertical: 24,
+    borderRadius: 20,
+    width: "100%",
+    alignItems: "center",
+  },
+  repeatBtnText: {
+    fontFamily: "Orbit_400Regular",
+    fontSize: 24,
+    color: "#FDFFF5",
+    fontWeight: "700",
+  },
+  doneBtn: {
+    backgroundColor: "#BFFF00",
+    paddingVertical: 24,
+    borderRadius: 20,
+    width: "100%",
+    alignItems: "center",
+  },
+  doneBtnText: {
+    fontFamily: "Orbit_400Regular",
+    fontSize: 24,
+    color: "#111",
+    fontWeight: "700",
+  },
+  btnDisabled: {
+    opacity: 0.3,
+  },
 });
