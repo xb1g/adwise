@@ -11,11 +11,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
-import { useAudioRecorder, AudioModule, RecordingPresets, setAudioModeAsync } from "expo-audio";
-import * as FileSystem from "expo-file-system";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../lib/auth";
-import { transcribeAudio } from "../../lib/ai";
 import BrainstormChat from "../../lib/BrainstormChat";
 
 const AGE_RANGES = ["20s", "30s", "40s", "50s", "60s+"];
@@ -32,7 +29,7 @@ const CATEGORIES = [
 const TOTAL_STEPS = 4;
 
 export default function SeekerOnboarding() {
-  const { user, signOut } = useAuth();
+  const { user, signOut, refreshSeekerOnboarding } = useAuth();
 
   // Navigation
   const [step, setStep] = useState(1);
@@ -45,11 +42,8 @@ export default function SeekerOnboarding() {
   const [categories, setCategories] = useState<string[]>([]);
 
   // Step 3
-  const [inputMode, setInputMode] = useState<"voice" | "text" | "brainstorm">("voice");
+  const [inputMode, setInputMode] = useState<"text" | "brainstorm">("text");
   const [problemText, setProblemText] = useState("");
-  const [isRecording, setIsRecording] = useState(false);
-  const [isTranscribing, setIsTranscribing] = useState(false);
-  const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
 
   // Step 4
   const [saving, setSaving] = useState(false);
@@ -69,63 +63,6 @@ export default function SeekerOnboarding() {
     setCategories((prev) =>
       prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat]
     );
-  }
-
-  // ── recording ────────────────────────────────────────────────────────────
-
-  async function startRecording() {
-    try {
-      const { granted } = await AudioModule.requestRecordingPermissionsAsync();
-      if (!granted) {
-        Alert.alert(
-          "Microphone permission denied",
-          "Please allow microphone access in settings, or switch to text mode.",
-          [
-            { text: "Use text instead", onPress: () => setInputMode("text") },
-            { text: "OK" },
-          ]
-        );
-        return;
-      }
-
-      await setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-      });
-
-      await audioRecorder.prepareToRecordAsync();
-      audioRecorder.record();
-      setIsRecording(true);
-    } catch (err) {
-      console.error("[onboarding] start recording error:", err);
-      Alert.alert("Error", "Could not start recording. Try text mode instead.");
-      setInputMode("text");
-    }
-  }
-
-  async function stopRecording() {
-    if (!isRecording) return;
-    setIsRecording(false);
-    setIsTranscribing(true);
-
-    try {
-      await audioRecorder.stop();
-      const uri = audioRecorder.uri;
-
-      if (!uri) throw new Error("No recording URI");
-
-      const base64 = await FileSystem.readAsStringAsync(uri, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-
-      const transcript = await transcribeAudio(base64, "audio/m4a");
-      setProblemText(transcript ?? "");
-    } catch (err) {
-      console.error("[onboarding] transcribe error:", err);
-      Alert.alert("Transcription failed", "Please try again or switch to text mode.");
-    } finally {
-      setIsTranscribing(false);
-    }
   }
 
   // ── submit ────────────────────────────────────────────────────────────────
@@ -151,6 +88,7 @@ export default function SeekerOnboarding() {
         .update({ name })
         .eq("user_id", user.id);
 
+      await refreshSeekerOnboarding(user.id);
       router.replace("/(seeker)/(tabs)/home");
     } catch (err) {
       console.error("[onboarding] save error:", err);
@@ -286,20 +224,18 @@ export default function SeekerOnboarding() {
   // ── step 3 ────────────────────────────────────────────────────────────────
 
   function renderStep3() {
-    const canContinue =
-      inputMode === "voice"
-        ? problemText.length > 5
-        : problemText.length > 10;
+    const canContinue = problemText.length > 10;
 
     // Full-screen brainstorm mode
     if (inputMode === "brainstorm") {
       return (
         <BrainstormChat
-          onComplete={(text) => {
-            if (text) setProblemText(text);
-            setInputMode("voice");
+          onComplete={(summary) => {
+            if (summary.problem_text) setProblemText(summary.problem_text);
+            if (summary.categories?.length > 0) setCategories(summary.categories);
+            setInputMode("text");
           }}
-          onCancel={() => setInputMode("voice")}
+          onCancel={() => setInputMode("text")}
         />
       );
     }
@@ -308,7 +244,7 @@ export default function SeekerOnboarding() {
       <View style={styles.stepContainer}>
         <Text style={styles.stepTitle}>Describe your situation.</Text>
         <Text style={styles.stepSubtitle}>
-          Speak or type. Be as open as you like.
+          Type or brainstorm with AI. Be as open as you like.
         </Text>
 
         {/* Brainstorm CTA */}
@@ -320,66 +256,22 @@ export default function SeekerOnboarding() {
           <Text style={styles.brainstormBtnSub}>Talk it out — AI helps you articulate</Text>
         </Pressable>
 
-        {inputMode === "voice" ? (
-          <View style={styles.voiceContainer}>
-            <Pressable
-              style={[
-                styles.micBtn,
-                isRecording && styles.micBtnRecording,
-                isTranscribing && styles.btnDisabled,
-              ]}
-              onPressIn={startRecording}
-              onPressOut={stopRecording}
-              disabled={isTranscribing}
-            >
-              {isTranscribing ? (
-                <ActivityIndicator color="#BFFF00" size="large" />
-              ) : (
-                <Text style={styles.micIcon}>
-                  {isRecording ? "⏹" : "🎙"}
-                </Text>
-              )}
-            </Pressable>
-
-            <Text style={styles.micHint}>
-              {isTranscribing
-                ? "Transcribing..."
-                : isRecording
-                ? "Release to stop"
-                : "Hold to record"}
-            </Text>
-
-            {problemText.length > 0 && (
-              <View style={styles.transcriptBox}>
-                <Text style={styles.transcriptText}>{problemText}</Text>
-              </View>
-            )}
-
-            <Pressable onPress={() => setInputMode("text")}>
-              <Text style={styles.modeToggleLink}>prefer to type?</Text>
-            </Pressable>
-          </View>
-        ) : (
-          <View style={styles.textModeContainer}>
-            <TextInput
-              style={styles.multilineInput}
-              placeholder="Describe what you're going through..."
-              placeholderTextColor="#888"
-              multiline
-              value={problemText}
-              onChangeText={setProblemText}
-              textAlignVertical="top"
-            />
-            <Pressable onPress={() => setInputMode("voice")}>
-              <Text style={styles.modeToggleLink}>prefer voice? 🎙</Text>
-            </Pressable>
-          </View>
-        )}
+        <View style={styles.textModeContainer}>
+          <TextInput
+            style={styles.multilineInput}
+            placeholder="Describe what you're going through..."
+            placeholderTextColor="#888"
+            multiline
+            value={problemText}
+            onChangeText={setProblemText}
+            textAlignVertical="top"
+          />
+        </View>
 
         <Pressable
           style={[styles.continueBtn, !canContinue && styles.btnDisabled]}
           onPress={() => canContinue && setStep(4)}
-          disabled={!canContinue || isRecording || isTranscribing}
+          disabled={!canContinue}
         >
           <Text style={styles.continueBtnText}>Continue →</Text>
         </Pressable>
@@ -654,7 +546,7 @@ const styles = StyleSheet.create({
     color: "#111",
   },
 
-  // Voice mode
+  // Voice mode (removed)
   voiceContainer: {
     alignItems: "center",
     marginBottom: 28,

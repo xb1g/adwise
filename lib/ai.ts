@@ -174,3 +174,20 @@ export async function matchElders(problemText: string, seekerId?: string): Promi
   if (error) throw error;
   return (data as { matches: MatchResult[] }).matches;
 }
+
+// --- Brainstorm ---
+
+export type BrainstormSummary = {
+  problem_text: string;
+  categories: string[];
+};
+
+export async function summarizeBrainstorm(
+  messages: { role: string; text: string }[]
+): Promise<BrainstormSummary> {
+  const { data, error } = await supabase.functions.invoke("summarize-brainstorm", {
+    body: { messages },
+  });
+  if (error) throw error;
+  return data as BrainstormSummary;
+}

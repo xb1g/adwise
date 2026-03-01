@@ -6,15 +6,17 @@ import {
   StyleSheet,
   ScrollView,
   Animated,
+  ActivityIndicator,
 } from "react-native";
 import { useConversation } from "@elevenlabs/react-native";
+import { summarizeBrainstorm, type BrainstormSummary } from "./ai";
 
 const AGENT_ID = "agent_5501kjnqpr36enzs4tx0j1r3r4nj";
 
 type Message = { role: "user" | "agent"; text: string };
 
 type Props = {
-  onComplete: (problemText: string) => void;
+  onComplete: (summary: BrainstormSummary) => void;
   onCancel: () => void;
 };
 
@@ -25,7 +27,7 @@ export default function BrainstormChat({ onComplete, onCancel }: Props) {
   const messagesRef = useRef<Message[]>([]);
   const sessionStartedRef = useRef(false);
 
-  const [phase, setPhase] = useState<"intro" | "conversation">("intro");
+  const [phase, setPhase] = useState<"intro" | "conversation" | "summarizing">("intro");
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [paused, setPaused] = useState(false);
@@ -101,12 +103,21 @@ export default function BrainstormChat({ onComplete, onCancel }: Props) {
   async function handleDone() {
     try { await conversation.endSession(); } catch (_) {}
 
-    // Extract problem text from user messages
-    const userMessages = messagesRef.current
-      .filter((m) => m.role === "user")
-      .map((m) => m.text);
-    const problemText = userMessages.join(" ").trim();
-    onComplete(problemText || "");
+    setPhase("summarizing");
+
+    try {
+      const summary = await summarizeBrainstorm(messagesRef.current);
+      onComplete(summary);
+    } catch (err) {
+      console.error("[brainstorm] summarize error:", err);
+      // Fallback: join user messages if summarization fails
+      const fallbackText = messagesRef.current
+        .filter((m) => m.role === "user")
+        .map((m) => m.text)
+        .join(" ")
+        .trim();
+      onComplete({ problem_text: fallbackText, categories: [] });
+    }
   }
 
   async function handlePause() {
@@ -174,6 +185,21 @@ export default function BrainstormChat({ onComplete, onCancel }: Props) {
               <Text style={styles.trustText}>Your words become your problem description</Text>
             </View>
           </View>
+        </View>
+      </View>
+    );
+  }
+
+  // ── Summarizing ──────────────────────────────────────────────────────────
+  if (phase === "summarizing") {
+    return (
+      <View style={styles.container}>
+        <View style={styles.summarizingContent}>
+          <ActivityIndicator color="#BFFF00" size="large" />
+          <Text style={styles.summarizingTitle}>Summarizing...</Text>
+          <Text style={styles.summarizingSubtitle}>
+            AI is distilling your conversation into a clear problem description.
+          </Text>
         </View>
       </View>
     );
@@ -450,4 +476,26 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
   btnDisabled: { opacity: 0.3 },
+
+  // Summarizing
+  summarizingContent: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 40,
+    gap: 20,
+  },
+  summarizingTitle: {
+    fontFamily: "Orbit_400Regular",
+    fontSize: 28,
+    fontWeight: "900",
+    color: "#111",
+  },
+  summarizingSubtitle: {
+    fontFamily: "Orbit_400Regular",
+    fontSize: 15,
+    color: "#555",
+    textAlign: "center",
+    lineHeight: 22,
+  },
 });

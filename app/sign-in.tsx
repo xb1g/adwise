@@ -13,16 +13,13 @@ import { useAuth } from "../lib/auth";
 
 export default function SignIn() {
   const { role } = useLocalSearchParams<{ role: "elder" | "seeker" }>();
-  const { signInWithGoogle, setPendingRole } = useAuth();
+  const { signInWithGoogle } = useAuth();
   const [loading, setLoading] = useState(false);
 
   const handleGoogle = async () => {
     setLoading(true);
     try {
-      if (role) await setPendingRole(role);
-      await signInWithGoogle();
-      // onAuthStateChange in auth.tsx will pick up the pending role,
-      // upsert wisdom_users, and _layout.tsx handles navigation
+      await signInWithGoogle(role ?? undefined);
     } catch (e) {
       console.error("Sign-in failed:", e);
     } finally {

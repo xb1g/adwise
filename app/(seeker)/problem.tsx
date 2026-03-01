@@ -163,8 +163,8 @@ export default function ProblemScreen() {
   if (showBrainstorm) {
     return (
       <BrainstormChat
-        onComplete={(text) => {
-          if (text) setProblemText(text);
+        onComplete={(summary) => {
+          if (summary.problem_text) setProblemText(summary.problem_text);
           setShowBrainstorm(false);
         }}
         onCancel={() => setShowBrainstorm(false)}

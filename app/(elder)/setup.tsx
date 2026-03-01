@@ -30,7 +30,7 @@ type ExtractedProfile = {
 };
 
 export default function ElderVoiceOnboarding() {
-  const { user, signOut } = useAuth();
+  const { user, signOut, refreshElderOnboarding } = useAuth();
   const scrollRef = useRef<ScrollView>(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const pulseRef = useRef<Animated.CompositeAnimation | null>(null);
@@ -193,6 +193,7 @@ export default function ElderVoiceOnboarding() {
         setPhase("reviewing");
       } else {
         console.log("[setup] profile saved, navigating to /(elder)/home");
+        await refreshElderOnboarding(user.id);
         router.replace("/(elder)/home");
       }
     } catch (err) {
