@@ -12,6 +12,7 @@ import {
 import { useLocalSearchParams, router } from "expo-router";
 import { useAuth } from "../../../lib/auth";
 import { supabase } from "../../../lib/supabase";
+import { TTSButton } from "../../../lib/TTSButton";
 
 type RequestDetail = {
   id: string;
@@ -178,6 +179,20 @@ export default function RequestDetailScreen() {
           <Text style={styles.matchReason}>{request.match_reason}</Text>
         </View>
       ) : null}
+
+      {/* Listen to their story — voice first */}
+      <TTSButton
+        text={[
+          seeker?.problem_text ? `Their situation: ${seeker.problem_text}` : "",
+          `What they asked: ${request.problem_text}`,
+          request.match_reason?.trim()
+            ? `Why you were matched: ${request.match_reason}`
+            : "",
+        ]
+          .filter(Boolean)
+          .join(". ")}
+        label="Listen to their story"
+      />
 
       {/* Call button */}
       <Pressable style={styles.callBtn} onPress={handleCall}>

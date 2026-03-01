@@ -3,6 +3,7 @@ import { Session, User } from "@supabase/supabase-js";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as AuthSession from "expo-auth-session";
 import * as WebBrowser from "expo-web-browser";
+import * as Linking from "expo-linking";
 import { supabase } from "./supabase";
 
 export type WisdomRole = "elder" | "seeker" | null;
@@ -31,9 +32,8 @@ type AuthContext = {
   refreshProfile: () => Promise<void>;
   refreshRole: (userId?: string) => Promise<void>;
   refreshSeekerOnboarding: (userId?: string) => Promise<void>;
-  setPendingRole: (role: "elder" | "seeker") => Promise<void>;
   signInAnonymously: () => Promise<void>;
-  signInWithGoogle: () => Promise<void>;
+  signInWithGoogle: (role?: "elder" | "seeker") => Promise<void>;
   signOut: () => Promise<void>;
 };
 
@@ -49,7 +49,6 @@ const AuthContext = createContext<AuthContext>({
   refreshProfile: async () => {},
   refreshRole: async () => {},
   refreshSeekerOnboarding: async () => {},
-  setPendingRole: async () => {},
   signInAnonymously: async () => {},
   signInWithGoogle: async () => {},
   signOut: async () => {},
@@ -160,6 +159,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     return () => subscription.unsubscribe();
+  }, []);
+
+  // Deep link listener: catches OAuth callback URLs when openAuthSessionAsync
+  // doesn't resolve (e.g. Android app restart on deep link).
+  useEffect(() => {
+    const processAuthUrl = async (url: string) => {
+      if (!url.includes("#access_token=")) return;
+      const fragment = url.split("#")[1] ?? "";
+      const params = new URLSearchParams(fragment);
+      const access_token = params.get("access_token");
+      const refresh_token = params.get("refresh_token");
+      if (access_token && refresh_token) {
+        console.log("[auth] deep link: setting session from URL tokens");
+        await supabase.auth.setSession({ access_token, refresh_token });
+      }
+    };
+
+    Linking.getInitialURL().then((url) => {
+      if (url) processAuthUrl(url);
+    });
+
+    const sub = Linking.addEventListener("url", ({ url }) => processAuthUrl(url));
+    return () => sub.remove();
   }, []);
 
   // Fetch seeker onboarding status whenever role becomes "seeker"

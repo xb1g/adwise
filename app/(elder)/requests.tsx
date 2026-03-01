@@ -10,6 +10,7 @@ import {
 import { router } from "expo-router";
 import { useAuth } from "../../lib/auth";
 import { supabase } from "../../lib/supabase";
+import { TTSButton } from "../../lib/TTSButton";
 
 type ElderRequest = {
   id: string;
@@ -61,12 +62,20 @@ function RequestCard({ request }: { request: ElderRequest }) {
     request.seeker_onboarding_done !== null;
   const displayName = request.seeker_name?.trim() || "Seeker";
 
+  const ttsText = [
+    `${displayName} says:`,
+    request.problem_text,
+    request.seeker_problem_text ? `Their situation: ${request.seeker_problem_text}` : "",
+    request.match_reason?.trim() ? `You were matched because: ${request.match_reason}` : "",
+  ]
+    .filter(Boolean)
+    .join(". ");
+
   return (
-    <Pressable
+    <View
       style={styles.card}
-      onPress={() => router.push(`/(elder)/request/${request.id}`)}
       accessibilityRole="button"
-      accessibilityLabel={`View request from ${displayName}`}
+      accessibilityLabel={`Request from ${displayName}`}
     >
       <View style={styles.cardHeader}>
         <View style={[styles.rankBadge, isTopRank && styles.rankBadgeAccent]}>
@@ -109,8 +118,16 @@ function RequestCard({ request }: { request: ElderRequest }) {
         {request.match_reason?.trim() ? request.match_reason : "No match reason recorded."}
       </Text>
 
-      <Text style={styles.viewMore}>View full details →</Text>
-    </Pressable>
+      <View style={styles.actionRow}>
+        <Pressable
+          style={styles.viewBtn}
+          onPress={() => router.push(`/(elder)/request/${request.id}`)}
+        >
+          <Text style={styles.viewBtnText}>View details →</Text>
+        </Pressable>
+        <TTSButton text={ttsText} label="Listen" />
+      </View>
+    </View>
   );
 }
 
@@ -352,12 +369,22 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     lineHeight: 32,
   },
-  viewMore: {
-    fontFamily: "Orbit_400Regular",
-    fontSize: 13,
-    color: "#9FE800",
-    fontWeight: "900",
-    letterSpacing: 1,
+  actionRow: {
+    flexDirection: "row",
+    gap: 10,
     marginTop: 4,
+  },
+  viewBtn: {
+    flex: 1,
+    backgroundColor: "#BFFF00",
+    paddingVertical: 14,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  viewBtnText: {
+    fontFamily: "Orbit_400Regular",
+    fontSize: 14,
+    color: "#111",
+    fontWeight: "900",
   },
 });
