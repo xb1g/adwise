@@ -87,6 +87,9 @@ export default function MatchDetail() {
         stories?.find((s) => s.elder_id === m.elder_id)?.preview_text ?? "",
     }));
 
+    // Sort elders with names first, preserving relative order within each group
+    enriched.sort((a, b) => (a.name ? 0 : 1) - (b.name ? 0 : 1));
+
     setCards(enriched);
     setLoading(false);
   }
