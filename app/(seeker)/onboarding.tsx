@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import {
   View,
   Text,
@@ -6,12 +6,12 @@ import {
   StyleSheet,
   TextInput,
   ScrollView,
-  SafeAreaView,
   ActivityIndicator,
   Alert,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
-import { Audio } from "expo-av";
+import { useAudioRecorder, AudioModule, RecordingPresets } from "expo-audio";
 import * as FileSystem from "expo-file-system";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../lib/auth";
@@ -31,7 +31,7 @@ const CATEGORIES = [
 const TOTAL_STEPS = 4;
 
 export default function SeekerOnboarding() {
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
 
   // Navigation
   const [step, setStep] = useState(1);
@@ -48,7 +48,7 @@ export default function SeekerOnboarding() {
   const [problemText, setProblemText] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
-  const recordingRef = useRef<Audio.Recording | null>(null);
+  const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
 
   // Step 4
   const [saving, setSaving] = useState(false);
@@ -57,6 +57,11 @@ export default function SeekerOnboarding() {
 
   function goBack() {
     setStep((s) => Math.max(1, s - 1));
+  }
+
+  async function exitOnboarding() {
+    await signOut();
+    router.replace("/");
   }
 
   function toggleCategory(cat: string) {
@@ -69,8 +74,8 @@ export default function SeekerOnboarding() {
 
   async function startRecording() {
     try {
-      const { status } = await Audio.requestPermissionsAsync();
-      if (status !== "granted") {
+      const { granted } = await AudioModule.requestRecordingPermissionsAsync();
+      if (!granted) {
         Alert.alert(
           "Microphone permission denied",
           "Please allow microphone access in settings, or switch to text mode.",
@@ -82,17 +87,13 @@ export default function SeekerOnboarding() {
         return;
       }
 
-      await Audio.setAudioModeAsync({
+      AudioModule.setAudioMode({
         allowsRecordingIOS: true,
         playsInSilentModeIOS: true,
       });
 
-      const recording = new Audio.Recording();
-      await recording.prepareToRecordAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
-      );
-      await recording.startAsync();
-      recordingRef.current = recording;
+      await audioRecorder.prepareToRecordAsync();
+      audioRecorder.record();
       setIsRecording(true);
     } catch (err) {
       console.error("[onboarding] start recording error:", err);
@@ -102,14 +103,13 @@ export default function SeekerOnboarding() {
   }
 
   async function stopRecording() {
-    if (!recordingRef.current) return;
+    if (!isRecording) return;
     setIsRecording(false);
     setIsTranscribing(true);
 
     try {
-      await recordingRef.current.stopAndUnloadAsync();
-      const uri = recordingRef.current.getURI();
-      recordingRef.current = null;
+      await audioRecorder.stop();
+      const uri = audioRecorder.uri;
 
       if (!uri) throw new Error("No recording URI");
 
@@ -454,7 +454,9 @@ export default function SeekerOnboarding() {
               <Text style={styles.backBtnText}>← Back</Text>
             </Pressable>
           ) : (
-            <View style={styles.backBtn} />
+            <Pressable style={styles.backBtn} onPress={exitOnboarding} hitSlop={12}>
+              <Text style={styles.backBtnText}>← Back</Text>
+            </Pressable>
           )}
           <ProgressDots />
           <View style={styles.backBtn} />
