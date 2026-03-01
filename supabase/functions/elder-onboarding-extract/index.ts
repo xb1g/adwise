@@ -8,6 +8,14 @@ Deno.serve(async (req) => {
     return new Response("ok", { headers: corsHeaders });
   }
   try {
+    const apiKey = Deno.env.get("MISTRAL_API_KEY");
+    if (!apiKey) {
+      return new Response(
+        JSON.stringify({ error: "extraction failed", details: "MISTRAL_API_KEY is not set" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
     const { messages } = await req.json();
 
     const transcript = messages
@@ -36,7 +44,7 @@ ${transcript}`;
     const response = await fetch("https://api.mistral.ai/v1/chat/completions", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${Deno.env.get("MISTRAL_API_KEY")}`,
+        "Authorization": `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -45,6 +53,11 @@ ${transcript}`;
         temperature: 0.3,
       }),
     });
+
+    if (!response.ok) {
+      const errBody = await response.text();
+      throw new Error(`Mistral API error ${response.status}: ${errBody}`);
+    }
 
     const data = await response.json();
     const raw = data.choices[0].message.content;
