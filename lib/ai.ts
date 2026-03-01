@@ -132,3 +132,45 @@ export async function onboardingExtract(
   if (error) throw error;
   return data as ExtractedProfile;
 }
+
+// --- Wisdom Marketplace ---
+
+export type StoryStructure = {
+  life_areas: string[];
+  key_topics: string[];
+  wisdom_snippets: string[];
+  preview_text: string;
+  bio: string;
+  tags: string[];
+};
+
+export type MatchResult = {
+  elder_id: string;
+  story_id: string;
+  rank: number;
+  match_reason: string;
+};
+
+export async function transcribeAudio(audioBase64: string, mimeType = "audio/m4a"): Promise<string> {
+  const { data, error } = await supabase.functions.invoke("transcribe", {
+    body: { audioBase64, mimeType },
+  });
+  if (error) throw error;
+  return (data as { transcript: string }).transcript;
+}
+
+export async function structureStory(transcript: string): Promise<StoryStructure> {
+  const { data, error } = await supabase.functions.invoke("structure-story", {
+    body: { transcript },
+  });
+  if (error) throw error;
+  return data as StoryStructure;
+}
+
+export async function matchElders(problemText: string, seekerId?: string): Promise<MatchResult[]> {
+  const { data, error } = await supabase.functions.invoke("match", {
+    body: { problemText, seekerId },
+  });
+  if (error) throw error;
+  return (data as { matches: MatchResult[] }).matches;
+}
