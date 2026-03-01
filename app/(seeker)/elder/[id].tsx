@@ -10,7 +10,7 @@ const ELDER_PAYOUT_PERCENT = 100 - PLATFORM_FEE_PERCENT;
 const ELDER_PAYOUT = BOOKING_PRICE * (ELDER_PAYOUT_PERCENT / 100);
 
 export default function ElderDetail() {
-  const { id, matchReason, bio, ageRange, lifeAreas, previewText, problemText } =
+  const { id, matchReason, bio, ageRange, lifeAreas, previewText, problemText, elderName } =
     useLocalSearchParams<{
       id: string;
       storyId: string;
@@ -20,6 +20,7 @@ export default function ElderDetail() {
       lifeAreas: string;
       previewText: string;
       problemText: string;
+      elderName: string;
     }>();
 
   const { user } = useAuth();
@@ -68,6 +69,7 @@ export default function ElderDetail() {
           <Text style={styles.avatarText}>◎</Text>
         </View>
         <View>
+          {elderName ? <Text style={styles.elderName}>{elderName}</Text> : null}
           <Text style={styles.ageRange}>{ageRange}</Text>
           <View style={styles.chipRow}>
             {areas.map((a) => (
@@ -144,6 +146,7 @@ const styles = StyleSheet.create({
   avatar: { width: 56, height: 56, backgroundColor: "#111", alignItems: "center", justifyContent: "center" },
   avatarText: { color: "#BFFF00", fontSize: 24 },
   ageRange: { fontFamily: "Orbit_400Regular", fontSize: 13, color: "#111", opacity: 0.6, marginBottom: 8 },
+  elderName: { fontFamily: "Orbit_400Regular", fontSize: 18, fontWeight: "700", color: "#111", marginBottom: 4 },
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   chip: { borderWidth: 1, borderColor: "#111", paddingVertical: 2, paddingHorizontal: 8 },
   chipText: { fontFamily: "Orbit_400Regular", fontSize: 11, color: "#111" },

@@ -191,8 +191,15 @@ export default function ElderRecord() {
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={12}>
-          <Text style={styles.backText}>← Back</Text>
+        <Pressable
+          style={styles.backBtn}
+          onPress={() => router.back()}
+          hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          accessibilityHint="Returns to the previous screen"
+        >
+          <Text style={styles.backText}>🔙</Text>
         </Pressable>
       </View>
 
@@ -248,7 +255,16 @@ export default function ElderRecord() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#FDFFF5" },
   header: { paddingHorizontal: 24, paddingTop: 16, paddingBottom: 8 },
-  backText: { fontFamily: "Orbit_400Regular", fontSize: 16, color: "#111", opacity: 0.5 },
+  backBtn: {
+    width: 56,
+    height: 56,
+    borderWidth: 1.5,
+    borderColor: "#111",
+    borderRadius: 28,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  backText: { fontSize: 30, color: "#111" },
   container: {
     flex: 1,
     paddingHorizontal: 24,

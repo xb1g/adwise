@@ -101,10 +101,60 @@ Make the story feel authentic to this specific elder's background. Vary the topi
     const cleaned = raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
     const structured = JSON.parse(cleaned);
 
+    // Generate voice audio via ElevenLabs TTS
+    let audioUrl: string | null = null;
+    const elevenLabsKey = Deno.env.get("ELEVENLABS_API_KEY");
+    if (elevenLabsKey && structured.transcript) {
+      try {
+        // Use a default voice; trim transcript to TTS limit
+        const ttsText = structured.transcript.slice(0, 4500);
+        const ttsRes = await fetch(
+          "https://api.elevenlabs.io/v1/text-to-speech/21m00Tcm4TlvDq8ikWAM",
+          {
+            method: "POST",
+            headers: {
+              "xi-api-key": elevenLabsKey,
+              "Content-Type": "application/json",
+              "Accept": "audio/mpeg",
+            },
+            body: JSON.stringify({
+              text: ttsText,
+              model_id: "eleven_multilingual_v2",
+              voice_settings: { stability: 0.5, similarity_boost: 0.75 },
+            }),
+          },
+        );
+
+        if (ttsRes.ok) {
+          const audioBytes = new Uint8Array(await ttsRes.arrayBuffer());
+          const audioPath = `${user.id}/${Date.now()}.mp3`;
+
+          // Use service role client for storage upload
+          const serviceClient = createClient(
+            Deno.env.get("SUPABASE_URL")!,
+            Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+          );
+          const { error: uploadErr } = await serviceClient.storage
+            .from("story-audio")
+            .upload(audioPath, audioBytes, { contentType: "audio/mpeg" });
+
+          if (uploadErr) {
+            console.warn("[dev-generate-story] audio upload failed:", uploadErr);
+          } else {
+            audioUrl = audioPath;
+          }
+        } else {
+          console.warn("[dev-generate-story] TTS failed:", await ttsRes.text());
+        }
+      } catch (ttsErr) {
+        console.warn("[dev-generate-story] TTS error:", ttsErr);
+      }
+    }
+
     // Save directly to stories table
     const { error: insertErr } = await supabase.from("stories").insert({
       elder_id: profile.id,
-      audio_url: null,
+      audio_url: audioUrl,
       transcript: structured.transcript,
       life_areas: structured.life_areas,
       key_topics: structured.key_topics,

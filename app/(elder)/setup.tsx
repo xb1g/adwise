@@ -340,8 +340,11 @@ export default function ElderVoiceOnboarding() {
             style={styles.introBackBtn}
             onPress={handleBack}
             hitSlop={12}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+            accessibilityHint="Returns to the previous step or signs out on first screen"
           >
-            <Text style={styles.introBackText}>← Back</Text>
+            <Text style={styles.introBackText}>🔙</Text>
           </Pressable>
 
           <View style={styles.introContent}>
@@ -546,8 +549,15 @@ export default function ElderVoiceOnboarding() {
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.header}>
-        <Pressable style={styles.headerBtn} onPress={handleBack} hitSlop={12}>
-          <Text style={styles.headerBtnText}>← Back</Text>
+        <Pressable
+          style={styles.headerBackBtn}
+          onPress={handleBack}
+          hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          accessibilityHint="Returns to previous setup step"
+        >
+          <Text style={styles.headerBackBtnText}>🔙</Text>
         </Pressable>
 
         <View style={styles.statusRow}>
@@ -655,12 +665,17 @@ const styles = StyleSheet.create({
     top: 20,
     left: 24,
     zIndex: 10,
-    padding: 10,
+    width: 56,
+    height: 56,
+    borderWidth: 1.5,
+    borderColor: "#111",
+    borderRadius: 28,
+    alignItems: "center",
+    justifyContent: "center",
   },
   introBackText: {
-    fontFamily: "Orbit_400Regular",
-    fontSize: 16,
-    color: "#666",
+    fontSize: 30,
+    color: "#111",
   },
   introContent: {
     flex: 1,
@@ -734,6 +749,19 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderBottomWidth: 2,
     borderBottomColor: "#111",
+  },
+  headerBackBtn: {
+    width: 56,
+    height: 56,
+    borderWidth: 1.5,
+    borderColor: "#111",
+    borderRadius: 28,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  headerBackBtnText: {
+    fontSize: 30,
+    color: "#111",
   },
   headerBtn: { paddingVertical: 6, paddingHorizontal: 4, minWidth: 80 },
   headerBtnText: {

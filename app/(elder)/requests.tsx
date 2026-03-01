@@ -103,8 +103,15 @@ export default function WisdomRequests() {
 
   return (
     <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
-      <Pressable style={styles.backBtn} onPress={() => router.back()} hitSlop={12}>
-        <Text style={styles.backBtnText}>← Back</Text>
+      <Pressable
+        style={styles.backBtn}
+        onPress={() => router.back()}
+        hitSlop={12}
+        accessibilityRole="button"
+        accessibilityLabel="Go back"
+        accessibilityHint="Returns to previous screen"
+      >
+        <Text style={styles.backBtnText}>🔙</Text>
       </Pressable>
 
       <Text style={styles.title}>Wisdom{"\n"}Requests</Text>
@@ -131,8 +138,18 @@ const styles = StyleSheet.create({
   container: { paddingTop: 60, paddingHorizontal: 24, paddingBottom: 60, gap: 28 },
   center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#FDFFF5" },
 
-  backBtn: { marginBottom: 8 },
-  backBtnText: { fontFamily: "Orbit_400Regular", fontSize: 20, color: "#111", fontWeight: "900" },
+  backBtn: {
+    marginBottom: 8,
+    width: 56,
+    height: 56,
+    borderWidth: 1.5,
+    borderColor: "#111",
+    borderRadius: 28,
+    alignItems: "center",
+    justifyContent: "center",
+    alignSelf: "flex-start",
+  },
+  backBtnText: { fontSize: 30, color: "#111" },
 
   title: {
     fontFamily: "Orbit_400Regular",

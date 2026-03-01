@@ -12,10 +12,20 @@ type ElderProfile = {
   bio: string;
 };
 
+type ElderStats = {
+  storiesCount: number;
+  peopleHelpedCount: number;
+};
+
 export default function ElderProfile() {
   const { user, refreshRole, signOut } = useAuth();
   const [profile, setProfile] = useState<ElderProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState<ElderStats>({
+    storiesCount: 0,
+    peopleHelpedCount: 0,
+  });
+  const [statsLoading, setStatsLoading] = useState(true);
   const [isEditingName, setIsEditingName] = useState(false);
   const [editedName, setEditedName] = useState("");
   const [savingName, setSavingName] = useState(false);
@@ -33,6 +43,60 @@ export default function ElderProfile() {
         setLoading(false);
       });
   }, [user]);
+
+  useEffect(() => {
+    if (!profile?.id) return;
+    const elderId = profile.id;
+
+    let active = true;
+    setStatsLoading(true);
+
+    async function fetchStats() {
+      try {
+        const [storiesRes, bookingsRes] = await Promise.all([
+          supabase
+            .from("stories")
+            .select("id", { count: "exact", head: true })
+            .eq("elder_id", elderId),
+          supabase.from("bookings").select("seeker_id").eq("elder_id", elderId),
+        ]);
+
+        if (storiesRes.error) {
+          throw storiesRes.error;
+        }
+
+        if (bookingsRes.error) {
+          throw bookingsRes.error;
+        }
+
+        if (!active) return;
+
+        const peopleHelpedCount = new Set(
+          (bookingsRes.data ?? []).map((booking) => booking.seeker_id)
+        ).size;
+
+        setStats({
+          storiesCount: storiesRes.count ?? 0,
+          peopleHelpedCount,
+        });
+      } catch (err) {
+        console.error("[profile] fetch stats error:", err);
+        if (active) {
+          setStats({ storiesCount: 0, peopleHelpedCount: 0 });
+        }
+      } finally {
+        if (active) {
+          setStatsLoading(false);
+        }
+      }
+    }
+
+    fetchStats();
+
+    return () => {
+      active = false;
+    };
+  }, [profile?.id]);
 
   function resetEditedName() {
     setEditedName(profile?.name ?? "");
@@ -118,11 +182,33 @@ export default function ElderProfile() {
 
   return (
     <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
-      <Pressable style={styles.backBtn} onPress={() => router.replace("/(elder)/home")} hitSlop={12}>
-        <Text style={styles.backBtnText}>← Home</Text>
+      <Pressable
+        style={styles.backBtn}
+        onPress={() => router.replace("/(elder)/home")}
+        hitSlop={12}
+        accessibilityRole="button"
+        accessibilityLabel="Go to home"
+        accessibilityHint="Returns to elder home screen"
+      >
+        <Text style={styles.backBtnText}>🏠</Text>
       </Pressable>
 
       <Text style={styles.title}>My Profile</Text>
+
+      <View style={styles.statsBlock}>
+        <View style={styles.statCard}>
+          <Text style={styles.statValue} accessibilityRole="text">
+            {statsLoading ? "…" : stats.storiesCount}
+          </Text>
+          <Text style={styles.statLabel}>Stories</Text>
+        </View>
+        <View style={styles.statCard}>
+          <Text style={styles.statValue} accessibilityRole="text">
+            {statsLoading ? "…" : stats.peopleHelpedCount}
+          </Text>
+          <Text style={styles.statLabel}>People helped</Text>
+        </View>
+      </View>
 
       <View style={styles.section}>
         <Text style={styles.label}>Name</Text>
@@ -156,8 +242,14 @@ export default function ElderProfile() {
         ) : (
           <View style={styles.nameRow}>
             {profile.name ? <Text style={styles.value}>{profile.name}</Text> : <Text style={styles.emptyText}>No name set</Text>}
-            <Pressable onPress={() => setIsEditingName(true)} hitSlop={8}>
-              <Text style={styles.editLink}>Edit</Text>
+            <Pressable
+              onPress={() => setIsEditingName(true)}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Edit name"
+              accessibilityHint="Opens name editing field"
+            >
+              <Text style={styles.editLink}>✏️</Text>
             </Pressable>
           </View>
         )}
@@ -223,16 +315,56 @@ const styles = StyleSheet.create({
   container: { paddingTop: 60, paddingHorizontal: 24, paddingBottom: 60, gap: 28 },
   center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#FDFFF5" },
 
-  backBtn: { marginBottom: 8 },
-  backBtnText: { fontFamily: "Orbit_400Regular", fontSize: 20, color: "#111", fontWeight: "900" },
+  backBtn: {
+    marginBottom: 8,
+    width: 56,
+    height: 56,
+    borderWidth: 1.5,
+    borderColor: "#111",
+    borderRadius: 28,
+    alignItems: "center",
+    justifyContent: "center",
+    alignSelf: "flex-start",
+  },
+  backBtnText: { fontSize: 30, color: "#111" },
 
   title: { fontFamily: "Orbit_400Regular", fontSize: 40, color: "#111", fontWeight: "900" },
+  statsBlock: {
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 8,
+  },
+  statCard: {
+    flex: 1,
+    borderWidth: 2,
+    borderColor: "#111",
+    padding: 16,
+    alignItems: "center",
+    backgroundColor: "#FFF",
+    gap: 4,
+  },
+  statValue: {
+    fontFamily: "Orbit_400Regular",
+    fontSize: 34,
+    fontWeight: "900",
+    color: "#111",
+    lineHeight: 40,
+  },
+  statLabel: {
+    fontFamily: "Orbit_400Regular",
+    fontSize: 12,
+    letterSpacing: 1.5,
+    fontWeight: "900",
+    color: "#111",
+    textTransform: "uppercase",
+    opacity: 0.65,
+  },
 
   section: { gap: 10 },
   label: { fontFamily: "Orbit_400Regular", fontSize: 14, color: "#111", fontWeight: "900", letterSpacing: 2, textTransform: "uppercase" },
   value: { fontFamily: "Orbit_400Regular", fontSize: 28, color: "#111", fontWeight: "900" },
   nameRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
-  editLink: { fontFamily: "Orbit_400Regular", fontSize: 13, color: "#555", textDecorationLine: "underline" },
+  editLink: { fontSize: 26, color: "#111", lineHeight: 30 },
   emptyText: { fontFamily: "Orbit_400Regular", fontSize: 28, color: "#999", fontWeight: "900" },
   nameInput: {
     borderWidth: 2,

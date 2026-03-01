@@ -268,8 +268,15 @@ export default function MyStories() {
     return (
       <SafeAreaView style={styles.chatSafe}>
         <View style={styles.chatHeader}>
-          <Pressable style={styles.chatHeaderBtn} onPress={handlePause} hitSlop={12}>
-            <Text style={styles.chatHeaderBtnText}>← Back</Text>
+          <Pressable
+            style={styles.chatHeaderBtn}
+            onPress={handlePause}
+            hitSlop={12}
+            accessibilityRole="button"
+            accessibilityLabel="Pause and return"
+            accessibilityHint="Ends the conversation temporarily and returns to stories"
+          >
+            <Text style={styles.chatHeaderBtnText}>🔙</Text>
           </Pressable>
           <View style={styles.chatStatusRow}>
             <Animated.View
@@ -354,8 +361,15 @@ export default function MyStories() {
     <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
       {/* Header row */}
       <View style={styles.headerRow}>
-        <Pressable style={styles.backBtn} onPress={() => router.back()} hitSlop={12}>
-          <Text style={styles.backBtnText}>← Back</Text>
+        <Pressable
+          style={styles.backBtn}
+          onPress={() => router.back()}
+          hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          accessibilityHint="Returns to the previous screen"
+        >
+          <Text style={styles.backBtnText}>🔙</Text>
         </Pressable>
       </View>
 
@@ -428,12 +442,18 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: 8,
   },
-  backBtn: {},
+  backBtn: {
+    width: 56,
+    height: 56,
+    borderWidth: 1.5,
+    borderColor: "#111",
+    borderRadius: 28,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   backBtnText: {
-    fontFamily: "Orbit_400Regular",
-    fontSize: 20,
+    fontSize: 30,
     color: "#111",
-    fontWeight: "900",
   },
 
   title: {
@@ -623,12 +643,19 @@ const styles = StyleSheet.create({
     borderBottomWidth: 2,
     borderBottomColor: "#111",
   },
-  chatHeaderBtn: { paddingVertical: 6, paddingHorizontal: 4, minWidth: 80 },
+  chatHeaderBtn: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    borderWidth: 1.5,
+    borderColor: "#111",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: -4,
+  },
   chatHeaderBtnText: {
-    fontFamily: "Orbit_400Regular",
-    fontSize: 18,
+    fontSize: 30,
     color: "#111",
-    fontWeight: "900",
   },
   chatStatusRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   chatStatusDot: { width: 12, height: 12, borderRadius: 6 },
