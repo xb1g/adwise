@@ -1,5 +1,6 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Dimensions,
   NativeScrollEvent,
   NativeSyntheticEvent,
@@ -10,48 +11,34 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { router } from "expo-router";
+import { supabase } from "../../../lib/supabase";
+import { useAuth } from "../../../lib/auth";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const CARD_WIDTH = SCREEN_WIDTH - 32;
 
-const MOCK_STORIES = [
-  {
-    id: "s-1",
-    name: "Maria",
-    age_range: "60s",
-    life_areas: ["career", "immigration"],
-    preview:
-      "Left everything at 35 to start over in a new country with $200. Here's what she learned about betting on yourself.",
-  },
-  {
-    id: "s-2",
-    name: "Robert",
-    age_range: "70s",
-    life_areas: ["startup", "failure"],
-    preview:
-      "Lost two companies and a marriage. Then built something that actually mattered — at 62.",
-  },
-  {
-    id: "s-3",
-    name: "James",
-    age_range: "60s",
-    life_areas: ["career", "identity"],
-    preview:
-      "Spent 35 years in the wrong life. Changed everything at 58. No regrets.",
-  },
-  {
-    id: "s-4",
-    name: "Linda",
-    age_range: "60s",
-    life_areas: ["marriage", "reinvention"],
-    preview:
-      "Left a 28-year marriage at 55 and discovered who she actually was.",
-  },
-];
-
 export default function FeedScreen() {
+  const { user } = useAuth();
+  const [stories, setStories] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [activeSlide, setActiveSlide] = useState(0);
   const carouselRef = useRef<ScrollView>(null);
+
+  useEffect(() => {
+    supabase
+      .from("stories")
+      .select(
+        "id, elder_id, preview_text, wisdom_snippets, life_areas, tags, created_at, elder_profiles!inner(bio, age_range, life_areas)"
+      )
+      .eq("status", "published")
+      .order("created_at", { ascending: false })
+      .limit(20)
+      .then(({ data }) => {
+        setStories(data ?? []);
+        setLoading(false);
+      });
+  }, []);
 
   function handleCarouselScroll(
     e: NativeSyntheticEvent<NativeScrollEvent>
@@ -59,6 +46,31 @@ export default function FeedScreen() {
     const offsetX = e.nativeEvent.contentOffset.x;
     const index = Math.round(offsetX / CARD_WIDTH);
     setActiveSlide(index);
+  }
+
+  function navigateToElder(story: any) {
+    router.push({
+      pathname: "/(seeker)/elder/[id]",
+      params: {
+        id: story.elder_id,
+        bio: story.elder_profiles?.bio,
+        ageRange: story.elder_profiles?.age_range,
+        lifeAreas: JSON.stringify(story.life_areas),
+        previewText: story.preview_text,
+        matchReason: "",
+      },
+    });
+  }
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#BFFF00" />
+          <Text style={styles.loadingText}>loading stories...</Text>
+        </View>
+      </SafeAreaView>
+    );
   }
 
   return (
@@ -76,89 +88,117 @@ export default function FeedScreen() {
 
         {/* Section A: Spotlight Story Carousel */}
         <Text style={styles.sectionLabel}>✦ spotlight stories</Text>
-        <ScrollView
-          ref={carouselRef}
-          horizontal
-          pagingEnabled
-          showsHorizontalScrollIndicator={false}
-          snapToInterval={CARD_WIDTH + 12}
-          decelerationRate="fast"
-          contentContainerStyle={styles.carouselContent}
-          onScroll={handleCarouselScroll}
-          scrollEventThrottle={16}
-        >
-          {MOCK_STORIES.map((story) => (
-            <View key={story.id} style={styles.storyCard}>
-              <View style={styles.storyCardTop}>
-                <Text style={styles.storyName}>
-                  {story.name},{" "}
-                  <Text style={styles.storyAgeRange}>{story.age_range}</Text>
-                </Text>
-                <View style={styles.chipsRow}>
-                  {story.life_areas.map((area) => (
-                    <View key={area} style={styles.chip}>
-                      <Text style={styles.chipText}>{area}</Text>
+        {stories.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyText}>
+              no stories yet — check back soon
+            </Text>
+          </View>
+        ) : (
+          <>
+            <ScrollView
+              ref={carouselRef}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              snapToInterval={CARD_WIDTH + 12}
+              decelerationRate="fast"
+              contentContainerStyle={styles.carouselContent}
+              onScroll={handleCarouselScroll}
+              scrollEventThrottle={16}
+            >
+              {stories.map((story) => (
+                <View key={story.id} style={styles.storyCard}>
+                  <View style={styles.storyCardTop}>
+                    <Text style={styles.storyName}>
+                      Elder,{" "}
+                      <Text style={styles.storyAgeRange}>
+                        {story.elder_profiles?.age_range ?? ""}
+                      </Text>
+                    </Text>
+                    <View style={styles.chipsRow}>
+                      {(story.life_areas ?? []).map((area: string) => (
+                        <View key={area} style={styles.chip}>
+                          <Text style={styles.chipText}>{area}</Text>
+                        </View>
+                      ))}
                     </View>
-                  ))}
+                  </View>
+                  <Text style={styles.storyPreview}>
+                    {story.preview_text}
+                  </Text>
+                  <Pressable onPress={() => navigateToElder(story)}>
+                    <Text style={styles.readMore}>read their story →</Text>
+                  </Pressable>
                 </View>
-              </View>
-              <Text style={styles.storyPreview}>{story.preview}</Text>
-              <Pressable
-                onPress={() =>
-                  console.log(`read story: ${story.id}`)
-                }
-              >
-                <Text style={styles.readMore}>read their story →</Text>
-              </Pressable>
-            </View>
-          ))}
-        </ScrollView>
+              ))}
+            </ScrollView>
 
-        {/* Pagination dots */}
-        <View style={styles.dotsRow}>
-          {MOCK_STORIES.map((_, i) => (
-            <View
-              key={i}
-              style={[
-                styles.dot,
-                i === activeSlide ? styles.dotActive : styles.dotInactive,
-              ]}
-            />
-          ))}
-        </View>
+            {/* Pagination dots */}
+            <View style={styles.dotsRow}>
+              {stories.map((_, i) => (
+                <View
+                  key={i}
+                  style={[
+                    styles.dot,
+                    i === activeSlide ? styles.dotActive : styles.dotInactive,
+                  ]}
+                />
+              ))}
+            </View>
+          </>
+        )}
 
         {/* Section B: Dashboard */}
         <Text style={styles.sectionLabel}>◈ your dashboard</Text>
         <View style={styles.statsRow}>
           <View style={styles.statCard}>
-            <Text style={styles.statNumber}>5</Text>
-            <Text style={styles.statLabel}>matches</Text>
+            <Text style={styles.statNumber}>{stories.length}</Text>
+            <Text style={styles.statLabel}>stories</Text>
           </View>
           <View style={styles.statCard}>
-            <Text style={styles.statNumber}>2</Text>
-            <Text style={styles.statLabel}>new</Text>
+            <Text style={styles.statNumber}>
+              {stories.length > 0
+                ? stories.filter(
+                    (s) =>
+                      Date.now() - new Date(s.created_at).getTime() <
+                      7 * 24 * 60 * 60 * 1000
+                  ).length
+                : 0}
+            </Text>
+            <Text style={styles.statLabel}>new this week</Text>
           </View>
         </View>
 
         {/* Section C: Story feed */}
         <Text style={styles.sectionLabel}>✦ story feed</Text>
-        <View style={styles.feedList}>
-          {MOCK_STORIES.map((story) => (
-            <Pressable
-              key={story.id}
-              style={styles.feedRow}
-              onPress={() => console.log(`feed item pressed: ${story.id}`)}
-            >
-              <Text style={styles.feedPrefix}>✦ </Text>
-              <View style={styles.feedTextBlock}>
-                <Text style={styles.feedName}>{story.name}</Text>
-                <Text style={styles.feedPreview} numberOfLines={1}>
-                  {story.preview}
-                </Text>
-              </View>
-            </Pressable>
-          ))}
-        </View>
+        {stories.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyText}>
+              no stories to show yet
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.feedList}>
+            {stories.map((story) => (
+              <Pressable
+                key={story.id}
+                style={styles.feedRow}
+                onPress={() => navigateToElder(story)}
+              >
+                <Text style={styles.feedPrefix}>✦ </Text>
+                <View style={styles.feedTextBlock}>
+                  <Text style={styles.feedName}>
+                    Elder · {story.elder_profiles?.age_range ?? ""}
+                  </Text>
+                  <Text style={styles.feedPreview} numberOfLines={1}>
+                    {story.preview_text}
+                  </Text>
+                </View>
+              </Pressable>
+            ))}
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -175,6 +215,32 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     paddingBottom: 32,
+  },
+
+  /* Loading */
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 12,
+  },
+  loadingText: {
+    fontFamily: "Orbit_400Regular",
+    fontSize: 13,
+    color: "#555",
+  },
+
+  /* Empty state */
+  emptyState: {
+    paddingHorizontal: 16,
+    paddingVertical: 32,
+    alignItems: "center",
+  },
+  emptyText: {
+    fontFamily: "Orbit_400Regular",
+    fontSize: 13,
+    color: "#999",
+    fontStyle: "italic",
   },
 
   /* Header */
