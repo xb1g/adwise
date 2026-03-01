@@ -34,6 +34,7 @@ export default function ElderVoiceOnboarding() {
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const pulseRef = useRef<Animated.CompositeAnimation | null>(null);
   const messagesRef = useRef<Message[]>([]);
+  const reviewEnteredRef = useRef(false);
 
   const [phase, setPhase] = useState<Phase>("intro");
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -68,7 +69,10 @@ export default function ElderVoiceOnboarding() {
       console.log("[elder-onboarding] connected", cid);
       setPaused(false);
     },
-    onDisconnect: () => console.log("[elder-onboarding] disconnected"),
+    onDisconnect: () => {
+      console.log("[elder-onboarding] disconnected");
+      enterReview();
+    },
     onError: (message: string) =>
       console.error("[elder-onboarding] error:", message),
   });
@@ -117,6 +121,8 @@ export default function ElderVoiceOnboarding() {
   }
 
   async function enterReview() {
+    if (reviewEnteredRef.current) return;
+    reviewEnteredRef.current = true;
     setPhase("reviewing");
     const { data, error } = await supabase.functions.invoke(
       "elder-onboarding-extract",
@@ -332,9 +338,21 @@ export default function ElderVoiceOnboarding() {
             {extractionFailed ? (
               <>
                 <Text style={styles.reviewLoadingText}>Couldn't extract your profile.</Text>
-                <Text style={styles.reviewLoadingText}>Tap Start Over to try again.</Text>
-                <Pressable style={[styles.doneBtn, { marginTop: 24 }]} onPress={handleStartOver}>
-                  <Text style={styles.doneBtnText}>Start Over</Text>
+                <Text style={[styles.reviewLoadingText, { fontSize: 14, opacity: 0.6 }]}>
+                  Check your connection and try again.
+                </Text>
+                <Pressable
+                  style={[styles.doneBtn, { marginTop: 24 }]}
+                  onPress={() => {
+                    reviewEnteredRef.current = false;
+                    setExtractionFailed(false);
+                    enterReview();
+                  }}
+                >
+                  <Text style={styles.doneBtnText}>Try Again</Text>
+                </Pressable>
+                <Pressable style={[styles.repeatBtn, { marginTop: 12 }]} onPress={handleStartOver}>
+                  <Text style={styles.repeatBtnText}>Start Over</Text>
                 </Pressable>
               </>
             ) : (
