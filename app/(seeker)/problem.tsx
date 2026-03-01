@@ -14,6 +14,7 @@ import { router } from "expo-router";
 import { useAuth } from "../../lib/auth";
 import { matchElders, MatchResult } from "../../lib/ai";
 import { supabase } from "../../lib/supabase";
+import BrainstormChat from "../../lib/BrainstormChat";
 
 
 const PROBLEM_PROMPTS = [
@@ -52,6 +53,7 @@ export default function ProblemScreen() {
   const [name, setName] = useState("");
   const [problemText, setProblemText] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showBrainstorm, setShowBrainstorm] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -156,6 +158,18 @@ export default function ProblemScreen() {
     }
   }
 
+  if (showBrainstorm) {
+    return (
+      <BrainstormChat
+        onComplete={(text) => {
+          if (text) setProblemText(text);
+          setShowBrainstorm(false);
+        }}
+        onCancel={() => setShowBrainstorm(false)}
+      />
+    );
+  }
+
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
@@ -193,6 +207,12 @@ export default function ProblemScreen() {
         />
 
         <View style={styles.promptsContainer}>
+          <Pressable
+            style={styles.brainstormChip}
+            onPress={() => setShowBrainstorm(true)}
+          >
+            <Text style={styles.brainstormChipText}>🧠 Brainstorm with AI</Text>
+          </Pressable>
           {PROBLEM_PROMPTS.map((prompt) => (
             <Pressable
               key={prompt}
@@ -296,6 +316,20 @@ const styles = StyleSheet.create({
     fontFamily: "Orbit_400Regular",
     fontSize: 13,
     color: "#555",
+  },
+  brainstormChip: {
+    borderWidth: 2,
+    borderColor: "#111",
+    backgroundColor: "#111",
+    borderRadius: 20,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+  },
+  brainstormChipText: {
+    fontFamily: "Orbit_400Regular",
+    fontSize: 13,
+    color: "#BFFF00",
+    fontWeight: "700",
   },
   btn: {
     backgroundColor: "#BFFF00",

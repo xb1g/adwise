@@ -16,6 +16,7 @@ import * as FileSystem from "expo-file-system";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../lib/auth";
 import { transcribeAudio } from "../../lib/ai";
+import BrainstormChat from "../../lib/BrainstormChat";
 
 const AGE_RANGES = ["20s", "30s", "40s", "50s", "60s+"];
 const CATEGORIES = [
@@ -44,7 +45,7 @@ export default function SeekerOnboarding() {
   const [categories, setCategories] = useState<string[]>([]);
 
   // Step 3
-  const [inputMode, setInputMode] = useState<"voice" | "text">("voice");
+  const [inputMode, setInputMode] = useState<"voice" | "text" | "brainstorm">("voice");
   const [problemText, setProblemText] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -290,12 +291,34 @@ export default function SeekerOnboarding() {
         ? problemText.length > 5
         : problemText.length > 10;
 
+    // Full-screen brainstorm mode
+    if (inputMode === "brainstorm") {
+      return (
+        <BrainstormChat
+          onComplete={(text) => {
+            if (text) setProblemText(text);
+            setInputMode("voice");
+          }}
+          onCancel={() => setInputMode("voice")}
+        />
+      );
+    }
+
     return (
       <View style={styles.stepContainer}>
         <Text style={styles.stepTitle}>Describe your situation.</Text>
         <Text style={styles.stepSubtitle}>
           Speak or type. Be as open as you like.
         </Text>
+
+        {/* Brainstorm CTA */}
+        <Pressable
+          style={styles.brainstormBtn}
+          onPress={() => setInputMode("brainstorm")}
+        >
+          <Text style={styles.brainstormBtnText}>🧠 Brainstorm with AI</Text>
+          <Text style={styles.brainstormBtnSub}>Talk it out — AI helps you articulate</Text>
+        </Pressable>
 
         {inputMode === "voice" ? (
           <View style={styles.voiceContainer}>
@@ -440,6 +463,11 @@ export default function SeekerOnboarding() {
   }
 
   // ── render ────────────────────────────────────────────────────────────────
+
+  // When brainstorm is active, render it full-screen (no header/scroll wrapper)
+  if (step === 3 && inputMode === "brainstorm") {
+    return renderStep3();
+  }
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -631,6 +659,26 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 28,
     gap: 16,
+  },
+  brainstormBtn: {
+    backgroundColor: "#111",
+    borderRadius: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    marginBottom: 24,
+    alignItems: "center",
+    gap: 4,
+  },
+  brainstormBtnText: {
+    fontFamily: "Orbit_400Regular",
+    fontSize: 18,
+    fontWeight: "900",
+    color: "#BFFF00",
+  },
+  brainstormBtnSub: {
+    fontFamily: "Orbit_400Regular",
+    fontSize: 12,
+    color: "#888",
   },
   micBtn: {
     width: 80,
