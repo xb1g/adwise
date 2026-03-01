@@ -1,5 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import { View, Text, Pressable, StyleSheet, Animated } from "react-native";
+import {
+  View,
+  Text,
+  Pressable,
+  StyleSheet,
+  Animated,
+  ScrollView,
+  SafeAreaView,
+} from "react-native";
 import { router } from "expo-router";
 import { useConversation } from "@elevenlabs/react-native";
 import { useAuth } from "../../lib/auth";
@@ -7,21 +15,21 @@ import { supabase } from "../../lib/supabase";
 
 const AGENT_ID = "agent_4601kjkqjm0de5z86ea0gmpxk1qw";
 
-type Status = "disconnected" | "connecting" | "connected";
+type Message = { role: "ai" | "user"; text: string };
 
 export default function ElderVoiceOnboarding() {
   const { user } = useAuth();
+  const scrollRef = useRef<ScrollView>(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const pulseRef = useRef<Animated.CompositeAnimation | null>(null);
 
-  // Track these explicitly via callbacks — reactive properties can lag in RN
-  const [status, setStatus] = useState<Status>("connecting");
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [paused, setPaused] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const conversation = useConversation({
     clientTools: {
-      // Called by the ElevenLabs agent when it has gathered enough info
       complete_onboarding: async (params: {
         age_range?: string;
         life_areas?: string[];
@@ -29,14 +37,21 @@ export default function ElderVoiceOnboarding() {
         await finishOnboarding(params.age_range, params.life_areas);
       },
     },
-    onStatusChange: ({ status: s }: { status: Status }) => {
-      setStatus(s);
-    },
     onModeChange: ({ mode }: { mode: "speaking" | "listening" }) => {
       setIsSpeaking(mode === "speaking");
     },
+    onMessage: ({ message }: { message: any }) => {
+      if (message?.type === "agent_response") {
+        const text: string = message.agent_response_event?.agent_response;
+        if (text) setMessages((prev) => [...prev, { role: "ai", text }]);
+      } else if (message?.type === "user_transcript") {
+        const text: string = message.user_transcription_event?.user_transcript;
+        if (text) setMessages((prev) => [...prev, { role: "user", text }]);
+      }
+    },
     onConnect: ({ conversationId }: { conversationId: string }) => {
       console.log("[elder-onboarding] connected", conversationId);
+      setPaused(false);
     },
     onDisconnect: () => {
       console.log("[elder-onboarding] disconnected");
@@ -46,14 +61,16 @@ export default function ElderVoiceOnboarding() {
     },
   });
 
-  // Pulse animation while AI is speaking
+  const isConnected = conversation.status === "connected";
+
+  // Pulse animation when AI is speaking
   useEffect(() => {
     pulseRef.current?.stop();
     if (isSpeaking) {
       pulseRef.current = Animated.loop(
         Animated.sequence([
-          Animated.timing(pulseAnim, { toValue: 1.3, duration: 600, useNativeDriver: true }),
-          Animated.timing(pulseAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 1.4, duration: 500, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
         ])
       );
       pulseRef.current.start();
@@ -62,6 +79,13 @@ export default function ElderVoiceOnboarding() {
     }
     return () => pulseRef.current?.stop();
   }, [isSpeaking]);
+
+  // Auto-scroll transcript to bottom
+  useEffect(() => {
+    if (messages.length > 0) {
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+    }
+  }, [messages]);
 
   // Auto-start on mount
   useEffect(() => {
@@ -87,39 +111,104 @@ export default function ElderVoiceOnboarding() {
     if (!error) router.replace("/(elder)/profile");
   }
 
-  function handleRepeat() {
-    if (status !== "connected") return;
-    conversation.sendUserMessage("Could you please repeat that?");
-  }
-
   async function handleDone() {
-    if (status === "connected") await conversation.endSession();
+    try { await conversation.endSession(); } catch (_) {}
     finishOnboarding();
   }
 
-  const isConnected = status === "connected";
+  function handleRepeat() {
+    if (!isConnected) return;
+    conversation.sendUserMessage("Could you please repeat that?");
+  }
+
+  async function handlePause() {
+    if (paused) {
+      // Resume — restart session
+      setPaused(false);
+      await conversation.startSession({ agentId: AGENT_ID });
+    } else {
+      // Pause — end session
+      try { await conversation.endSession(); } catch (_) {}
+      setPaused(true);
+    }
+  }
+
+  function handleBack() {
+    try { conversation.endSession(); } catch (_) {}
+    router.back();
+  }
+
+  const statusLabel = paused
+    ? "Paused"
+    : !isConnected
+    ? "Connecting..."
+    : isSpeaking
+    ? "Speaking..."
+    : "Listening...";
 
   return (
-    <View style={styles.container}>
-      {/* Status label */}
-      <Text style={styles.statusText}>
-        {status === "connecting"
-          ? "Connecting..."
-          : isSpeaking
-          ? "Speaking to you"
-          : "I'm listening..."}
-      </Text>
+    <SafeAreaView style={styles.safe}>
+      {/* Header */}
+      <View style={styles.header}>
+        <Pressable style={styles.headerBtn} onPress={handleBack}>
+          <Text style={styles.headerBtnText}>← Back</Text>
+        </Pressable>
 
-      {/* Animated orb */}
-      <View style={styles.orbWrapper}>
-        <Animated.View
-          style={[styles.orbGlow, { transform: [{ scale: pulseAnim }] }]}
-        />
-        <View style={[styles.orbCore, isSpeaking && styles.orbCoreActive]} />
+        <View style={styles.statusRow}>
+          <Animated.View
+            style={[
+              styles.statusDot,
+              {
+                backgroundColor: paused ? "#999" : isConnected ? "#BFFF00" : "#555",
+                transform: [{ scale: isSpeaking ? pulseAnim : 1 }],
+              },
+            ]}
+          />
+          <Text style={styles.statusLabel}>{statusLabel}</Text>
+        </View>
+
+        <Pressable style={styles.headerBtn} onPress={handlePause}>
+          <Text style={styles.headerBtnText}>{paused ? "Resume" : "Pause"}</Text>
+        </Pressable>
       </View>
 
-      {/* Buttons */}
-      <View style={styles.btnGroup}>
+      {/* Transcript */}
+      <ScrollView
+        ref={scrollRef}
+        style={styles.transcript}
+        contentContainerStyle={styles.transcriptContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {messages.length === 0 && (
+          <Text style={styles.emptyHint}>
+            {paused ? "Conversation paused." : "The conversation will appear here..."}
+          </Text>
+        )}
+        {messages.map((msg, i) => (
+          <View
+            key={i}
+            style={[
+              styles.bubble,
+              msg.role === "user" ? styles.bubbleUser : styles.bubbleAi,
+            ]}
+          >
+            <Text style={styles.bubbleLabel}>
+              {msg.role === "ai" ? "AI" : "You"}
+            </Text>
+            <Text
+              style={[
+                styles.bubbleText,
+                msg.role === "user" ? styles.bubbleTextUser : styles.bubbleTextAi,
+              ]}
+            >
+              {msg.text}
+            </Text>
+          </View>
+        ))}
+      </ScrollView>
+
+      {/* Controls */}
+      <View style={styles.controls}>
         <Pressable
           style={[styles.repeatBtn, !isConnected && styles.btnDisabled]}
           onPress={handleRepeat}
@@ -129,86 +218,137 @@ export default function ElderVoiceOnboarding() {
         </Pressable>
 
         <Pressable
-          style={[styles.doneBtn, (!isConnected || saving) && styles.btnDisabled]}
+          style={[styles.doneBtn, saving && styles.btnDisabled]}
           onPress={handleDone}
-          disabled={!isConnected || saving}
+          disabled={saving}
         >
           <Text style={styles.doneBtnText}>
             {saving ? "Saving..." : "I'm Done"}
           </Text>
         </Pressable>
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  safe: {
     flex: 1,
     backgroundColor: "#FDFFF5",
+  },
+  header: {
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingTop: 120,
-    paddingBottom: 80,
-    paddingHorizontal: 32,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E8E8E0",
   },
-  statusText: {
+  headerBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 4,
+    minWidth: 70,
+  },
+  headerBtnText: {
     fontFamily: "Orbit_400Regular",
-    fontSize: 30,
+    fontSize: 16,
+    color: "#555",
+  },
+  statusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  statusDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  statusLabel: {
+    fontFamily: "Orbit_400Regular",
+    fontSize: 15,
     color: "#111",
+  },
+  transcript: {
+    flex: 1,
+  },
+  transcriptContent: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 12,
+    gap: 14,
+  },
+  emptyHint: {
+    fontFamily: "Orbit_400Regular",
+    fontSize: 16,
+    color: "#BBBBB0",
     textAlign: "center",
+    marginTop: 40,
+  },
+  bubble: {
+    borderRadius: 16,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    maxWidth: "90%",
+  },
+  bubbleAi: {
+    backgroundColor: "#FFF",
+    alignSelf: "flex-start",
+    borderWidth: 1,
+    borderColor: "#E8E8E0",
+  },
+  bubbleUser: {
+    backgroundColor: "#111",
+    alignSelf: "flex-end",
+  },
+  bubbleLabel: {
+    fontFamily: "Orbit_400Regular",
+    fontSize: 11,
+    color: "#999",
+    marginBottom: 4,
     letterSpacing: 0.5,
   },
-  orbWrapper: {
-    width: 240,
-    height: 240,
-    alignItems: "center",
-    justifyContent: "center",
+  bubbleText: {
+    fontFamily: "Orbit_400Regular",
+    fontSize: 18,
+    lineHeight: 26,
   },
-  orbGlow: {
-    position: "absolute",
-    width: 240,
-    height: 240,
-    borderRadius: 120,
-    backgroundColor: "#BFFF00",
-    opacity: 0.2,
+  bubbleTextAi: {
+    color: "#111",
   },
-  orbCore: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    backgroundColor: "#111",
+  bubbleTextUser: {
+    color: "#BFFF00",
   },
-  orbCoreActive: {
-    backgroundColor: "#BFFF00",
-  },
-  btnGroup: {
-    width: "100%",
-    gap: 16,
+  controls: {
+    paddingHorizontal: 24,
+    paddingBottom: 32,
+    paddingTop: 16,
+    gap: 14,
+    borderTopWidth: 1,
+    borderTopColor: "#E8E8E0",
   },
   repeatBtn: {
     backgroundColor: "#111",
-    paddingVertical: 24,
-    borderRadius: 20,
-    width: "100%",
+    paddingVertical: 20,
+    borderRadius: 16,
     alignItems: "center",
   },
   repeatBtnText: {
     fontFamily: "Orbit_400Regular",
-    fontSize: 24,
+    fontSize: 22,
     color: "#FDFFF5",
     fontWeight: "700",
   },
   doneBtn: {
     backgroundColor: "#BFFF00",
-    paddingVertical: 24,
-    borderRadius: 20,
-    width: "100%",
+    paddingVertical: 20,
+    borderRadius: 16,
     alignItems: "center",
   },
   doneBtnText: {
     fontFamily: "Orbit_400Regular",
-    fontSize: 24,
+    fontSize: 22,
     color: "#111",
     fontWeight: "700",
   },
