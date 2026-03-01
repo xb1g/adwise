@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
-import { useAudioRecorder, AudioModule, RecordingPresets } from "expo-audio";
+import { useAudioRecorder, AudioModule, RecordingPresets, setAudioModeAsync } from "expo-audio";
 import * as FileSystem from "expo-file-system";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../lib/auth";
@@ -87,7 +87,7 @@ export default function SeekerOnboarding() {
         return;
       }
 
-      AudioModule.setAudioMode({
+      await setAudioModeAsync({
         allowsRecordingIOS: true,
         playsInSilentModeIOS: true,
       });

@@ -1,0 +1,2 @@
+[functions.dev-generate-story]
+verify_jwt = false

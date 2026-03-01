@@ -29,7 +29,7 @@ export default function FeedScreen() {
     supabase
       .from("stories")
       .select(
-        "id, elder_id, preview_text, wisdom_snippets, life_areas, tags, created_at, elder_profiles!inner(bio, age_range, life_areas)"
+        "id, elder_id, preview_text, wisdom_snippets, life_areas, tags, created_at, elder_profiles!inner(name, bio, age_range, life_areas)"
       )
       .eq("status", "published")
       .order("created_at", { ascending: false })
@@ -111,7 +111,7 @@ export default function FeedScreen() {
                 <View key={story.id} style={styles.storyCard}>
                   <View style={styles.storyCardTop}>
                     <Text style={styles.storyName}>
-                      Elder,{" "}
+                      {story.elder_profiles?.name || "Elder"},{" "}
                       <Text style={styles.storyAgeRange}>
                         {story.elder_profiles?.age_range ?? ""}
                       </Text>
@@ -189,7 +189,7 @@ export default function FeedScreen() {
                 <Text style={styles.feedPrefix}>✦ </Text>
                 <View style={styles.feedTextBlock}>
                   <Text style={styles.feedName}>
-                    Elder · {story.elder_profiles?.age_range ?? ""}
+                    {story.elder_profiles?.name || "Elder"} · {story.elder_profiles?.age_range ?? ""}
                   </Text>
                   <Text style={styles.feedPreview} numberOfLines={1}>
                     {story.preview_text}
@@ -214,7 +214,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#FDFFF5",
   },
   contentContainer: {
-    paddingBottom: 32,
+    paddingBottom: 100,
   },
 
   /* Loading */

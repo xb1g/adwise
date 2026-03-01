@@ -18,6 +18,13 @@ Deno.serve(async (req) => {
 
     const { messages } = await req.json();
 
+    if (!Array.isArray(messages) || messages.length === 0) {
+      return new Response(
+        JSON.stringify({ error: "extraction failed", details: "No conversation messages provided" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
     const transcript = messages
       .map((m: { role: string; text: string }) => {
         const speaker = m.role === "agent" ? "[Agent]" : "[You]";
@@ -29,11 +36,14 @@ Deno.serve(async (req) => {
 The elder was answering questions about their life experience and areas of expertise.
 Extract and return ONLY valid JSON (no markdown, no explanation).
 
+Pay close attention to the transcript — the elder usually introduces themselves by name early in the conversation.
+
 Return JSON matching this exact schema:
 {
+  "name": "string — the elder's first name (or full name if given). Extract from the conversation. If not mentioned, use empty string",
   "age_range": "string or null (e.g. '60s', '70s') — null if cannot be determined",
   "life_areas": ["array of 2-5 short topic strings, e.g. 'farming', 'entrepreneurship'"],
-  "bio": "2-3 sentence summary of the elder's life and expertise, written in third person",
+  "bio": "2-3 sentence summary of the elder's life and expertise, written in third person. Use their actual name if extracted.",
   "key_topics": ["3-5 specific topics or skills discussed"],
   "wisdom_summary": "1-2 sentences of the most valuable insight this elder can offer"
 }

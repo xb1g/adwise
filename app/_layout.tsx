@@ -6,16 +6,28 @@ import { supabase } from "../lib/supabase";
 import { useLocalSearchParams } from "expo-router";
 import { ElevenLabsProvider } from "@elevenlabs/react-native";
 
+// usePathname() strips Expo Router group segments, so:
+//   (elder)/setup  → /setup      (elder)/home → /home
+//   (seeker)/onboarding → /onboarding
+//   (seeker)/(tabs)/feed → /feed   (seeker)/(tabs)/profile → /profile
+const ELDER_PAGES = new Set(["/home", "/setup", "/profile", "/requests", "/sessions", "/stories", "/record"]);
+
+function isSeekerPage(pathname: string) {
+  return ["/feed", "/matches", "/profile", "/problem", "/onboarding"].includes(pathname) ||
+    pathname.startsWith("/elder/");
+}
+
 function RootNavigator() {
   const { session, loading, role, roleLoading, seekerOnboardingDone } = useAuth();
   const { noredirect } = useLocalSearchParams<{ noredirect?: string }>();
   const pathname = usePathname();
   const [elderOnboardingDone, setElderOnboardingDone] = useState<boolean | null>(null);
-  // Track previous pathname so we know when we've just left the setup page
+  // Track previous pathname so we know when we've just left the setup page.
+  // NOTE: usePathname() returns /setup (not /(elder)/setup) because groups are stripped.
   const prevPathnameRef = useRef<string | null>(null);
 
   // Re-fetch elderOnboardingDone on first load and whenever we navigate away
-  // from setup (i.e. the user just completed onboarding and we need fresh data).
+  // from /setup (i.e. the user just completed onboarding and we need fresh data).
   useEffect(() => {
     if (role !== "elder" || !session?.user?.id) return;
 
@@ -23,11 +35,9 @@ function RootNavigator() {
     prevPathnameRef.current = pathname;
 
     const isFirstLoad = prev === null;
-    const justLeftSetup = prev === "/(elder)/setup";
+    const justLeftSetup = prev === "/setup";
 
     if (!isFirstLoad && !justLeftSetup) {
-      // No need to re-fetch; elder onboarding status doesn't change mid-session
-      // (except right after completing setup).
       console.log(`[_layout] skip elder re-fetch: prev=${prev} → current=${pathname}`);
       return;
     }
@@ -55,14 +65,15 @@ function RootNavigator() {
     );
 
     if (loading || roleLoading) {
-      console.log("[_layout] skip: still loading auth/role");
+      console.log("[_layout] skip: still loading");
       return;
     }
     if (noredirect === "1") {
       console.log("[_layout] skip: noredirect=1");
       return;
     }
-    if (pathname === "/(seeker)/problem") return;
+    // /problem is a special seeker page that doesn't require onboarding
+    if (pathname === "/problem") return;
 
     if (!session) {
       if (pathname !== "/" && pathname !== "/sign-in") {
@@ -72,17 +83,12 @@ function RootNavigator() {
     } else if (!role) {
       // Guard against race where role is transiently null during sign-in
       // (onAuthStateChange fires before wisdom_users upsert completes).
-      // If already in a role-specific route, wait for role to resolve.
-      if (
-        !pathname.startsWith("/(seeker)") &&
-        !pathname.startsWith("/(elder)") &&
-        pathname !== "/" &&
-        pathname !== "/sign-in"
-      ) {
-        console.log("[_layout] no role, outside role routes → /");
+      const isRolePage = ELDER_PAGES.has(pathname) || isSeekerPage(pathname);
+      if (!isRolePage && pathname !== "/" && pathname !== "/sign-in") {
+        console.log("[_layout] no role, unknown route → /");
         router.replace("/");
       } else {
-        console.log("[_layout] no role yet, staying on", pathname);
+        console.log("[_layout] no role yet, waiting on", pathname);
       }
     } else if (role === "elder") {
       if (elderOnboardingDone === null) {
@@ -90,21 +96,19 @@ function RootNavigator() {
         return;
       }
       if (elderOnboardingDone) {
-        // Onboarding complete. Allow free navigation within /(elder)/.
-        // Only redirect if completely outside the elder section or stuck on setup.
-        if (!pathname.startsWith("/(elder)") || pathname === "/(elder)/setup") {
-          console.log(`[_layout] elder done, bad path ${pathname} → /(elder)/home`);
+        // Allow free navigation within elder pages (except /setup which means stale state).
+        if (!ELDER_PAGES.has(pathname) || pathname === "/setup") {
+          console.log(`[_layout] elder done, bad path "${pathname}" → /home`);
           router.replace("/(elder)/home");
         } else {
           console.log(`[_layout] elder done, staying on ${pathname}`);
         }
       } else {
-        // Not done — send to setup unless already there.
-        if (pathname !== "/(elder)/setup") {
-          console.log(`[_layout] elder NOT done, ${pathname} → /(elder)/setup`);
+        if (pathname !== "/setup") {
+          console.log(`[_layout] elder NOT done, "${pathname}" → /setup`);
           router.replace("/(elder)/setup");
         } else {
-          console.log("[_layout] elder NOT done, already on setup");
+          console.log("[_layout] elder NOT done, already on /setup");
         }
       }
     } else if (role === "seeker") {
@@ -113,14 +117,22 @@ function RootNavigator() {
         return;
       }
       if (seekerOnboardingDone) {
-        if (!pathname.startsWith("/(seeker)/(tabs)")) {
-          console.log(`[_layout] seeker done, ${pathname} → feed`);
+        // Redirect away from onboarding only; all other seeker pages are fine.
+        if (pathname === "/onboarding") {
+          console.log("[_layout] seeker done but on /onboarding → /feed");
           router.replace("/(seeker)/(tabs)/feed");
+        } else if (!isSeekerPage(pathname)) {
+          console.log(`[_layout] seeker done, unknown page "${pathname}" → /feed`);
+          router.replace("/(seeker)/(tabs)/feed");
+        } else {
+          console.log(`[_layout] seeker done, staying on ${pathname}`);
         }
       } else {
-        if (pathname !== "/(seeker)/onboarding") {
-          console.log(`[_layout] seeker NOT done, ${pathname} → onboarding`);
+        if (pathname !== "/onboarding") {
+          console.log(`[_layout] seeker NOT done, "${pathname}" → /onboarding`);
           router.replace("/(seeker)/onboarding");
+        } else {
+          console.log("[_layout] seeker NOT done, already on /onboarding");
         }
       }
     }

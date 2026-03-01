@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -29,6 +29,41 @@ export default function ProblemScreen() {
   const [name, setName] = useState("");
   const [problemText, setProblemText] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+
+    let active = true;
+    const userId = user.id;
+
+    Promise.all([
+      supabase
+        .from("seeker_profiles")
+        .select("name")
+        .eq("user_id", userId)
+        .maybeSingle(),
+      supabase
+        .from("wisdom_users")
+        .select("name")
+        .eq("user_id", userId)
+        .maybeSingle(),
+    ])
+      .then(([seekerProfileRes, wisdomUserRes]) => {
+        if (!active) return;
+        const value =
+          seekerProfileRes.data?.name?.trim() ||
+          wisdomUserRes.data?.name?.trim() ||
+          "";
+        setName(value);
+      })
+      .catch((err) => {
+        console.error("[problem] load name failed:", err);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [user?.id]);
 
   // We no longer strictly separate 'category' for the user input in UI,
   // but if clicked, we can append it or use it as a starter.

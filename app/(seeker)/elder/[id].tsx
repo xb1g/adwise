@@ -4,6 +4,11 @@ import { useLocalSearchParams, router } from "expo-router";
 import { useAuth } from "../../../lib/auth";
 import { supabase } from "../../../lib/supabase";
 
+const BOOKING_PRICE = 10;
+const PLATFORM_FEE_PERCENT = 10;
+const ELDER_PAYOUT_PERCENT = 100 - PLATFORM_FEE_PERCENT;
+const ELDER_PAYOUT = BOOKING_PRICE * (ELDER_PAYOUT_PERCENT / 100);
+
 export default function ElderDetail() {
   const { id, matchReason, bio, ageRange, lifeAreas, previewText, problemText } =
     useLocalSearchParams<{
@@ -115,10 +120,14 @@ export default function ElderDetail() {
         {booking ? (
           <ActivityIndicator color="#111" />
         ) : (
-          <Text style={styles.bookBtnText}>Book a 30-min conversation — $30</Text>
+          <Text style={styles.bookBtnText}>Book a 30-min conversation — ${BOOKING_PRICE}</Text>
         )}
       </Pressable>
 
+      <Text style={styles.bookNote}>
+        Elders earn ${ELDER_PAYOUT} ({ELDER_PAYOUT_PERCENT}%) on each ${BOOKING_PRICE} booking; platform keeps{" "}
+        {PLATFORM_FEE_PERCENT}%.
+      </Text>
       <Text style={styles.bookNote}>
         Real conversations with real people who have lived your exact problem.
       </Text>

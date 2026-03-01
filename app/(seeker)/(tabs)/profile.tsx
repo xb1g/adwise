@@ -6,12 +6,11 @@ import {
   Pressable,
   StyleSheet,
   ActivityIndicator,
+  Alert,
 } from "react-native";
 import { router } from "expo-router";
 import { supabase } from "../../../lib/supabase";
 import { useAuth } from "../../../lib/auth";
-
-const __DEV__ = process.env.NODE_ENV !== "production";
 
 type SeekerProfile = {
   name: string | null;
@@ -44,11 +43,10 @@ function timeAgo(dateStr: string): string {
 }
 
 export default function SeekerProfileTab() {
-  const { user, refreshRole } = useAuth();
+  const { user, refreshRole, signOut } = useAuth();
   const [profile, setProfile] = useState<SeekerProfile | null>(null);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
-  const [switching, setSwitching] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -71,28 +69,42 @@ export default function SeekerProfileTab() {
     });
   }, [user]);
 
-  async function handleDevReset() {
-    if (!user) return;
-    const r1 = await supabase.from("seeker_profiles").delete().eq("user_id", user.id);
-    const r2 = await supabase.from("wisdom_users").update({ onboarding_done: false }).eq("user_id", user.id);
-    console.log("[reset] seeker_profiles:", r1.error, "wisdom_users:", r2.error);
-    await refreshRole();
-    router.replace("/(seeker)/onboarding");
+  async function handleSignOut() {
+    await signOut();
+    router.replace("/");
   }
 
-  async function handleSwitchToElder() {
+  async function handleChangeChoice() {
     if (!user) return;
-    setSwitching(true);
     await supabase
       .from("wisdom_users")
-      .upsert({ user_id: user.id, role: "elder" }, { onConflict: "user_id" });
+      .upsert({ user_id: user.id, role: null }, { onConflict: "user_id" });
     await refreshRole();
-    // _layout.tsx detects role change and navigates to elder setup or home
+    router.replace("/");
   }
 
-  async function handleSignOut() {
-    await supabase.auth.signOut();
-    router.replace("/");
+  async function handleDeleteAccount() {
+    Alert.alert(
+      "Delete Account",
+      "This will permanently delete your account and all data. This cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            const { error } = await supabase.functions.invoke("delete-account");
+            if (error) {
+              console.error("[profile] delete account error:", error);
+              Alert.alert("Error", "Failed to delete account. Try again.");
+              return;
+            }
+            await signOut();
+            router.replace("/");
+          },
+        },
+      ]
+    );
   }
 
   if (loading) {
@@ -114,6 +126,12 @@ export default function SeekerProfileTab() {
           ) : null}
         </Text>
       </View>
+      {user?.email ? (
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>Email</Text>
+          <Text style={styles.sectionValue}>{user.email}</Text>
+        </View>
+      ) : null}
 
       {/* Category chips */}
       {profile?.categories?.length ? (
@@ -183,29 +201,18 @@ export default function SeekerProfileTab() {
 
       <View style={styles.divider} />
 
-      {/* Switch side */}
-      <Pressable
-        style={[styles.switchBtn, switching && styles.btnDisabled]}
-        onPress={handleSwitchToElder}
-        disabled={switching}
-      >
-        {switching ? (
-          <ActivityIndicator color="#111" size="small" />
-        ) : (
-          <Text style={styles.switchBtnText}>Switch to Elder side 👵</Text>
-        )}
-      </Pressable>
-
       {/* Sign out */}
       <Pressable style={styles.signOutBtn} onPress={handleSignOut}>
         <Text style={styles.signOutText}>Sign out</Text>
       </Pressable>
 
-      {__DEV__ && (
-        <Pressable style={styles.devResetBtn} onPress={handleDevReset}>
-          <Text style={styles.devResetText}>reset onboarding (dev)</Text>
-        </Pressable>
-      )}
+      <Pressable style={styles.changeBtn} onPress={handleChangeChoice}>
+        <Text style={styles.changeBtnText}>Change your choice</Text>
+      </Pressable>
+
+      <Pressable style={styles.deleteBtn} onPress={handleDeleteAccount}>
+        <Text style={styles.deleteBtnText}>Delete account (dev)</Text>
+      </Pressable>
     </ScrollView>
   );
 }
@@ -215,7 +222,7 @@ const styles = StyleSheet.create({
   container: {
     paddingTop: 60,
     paddingHorizontal: 24,
-    paddingBottom: 64,
+    paddingBottom: 100,
     gap: 16,
   },
   center: {
@@ -274,6 +281,15 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
     marginBottom: 8,
   },
+  section: {
+    marginBottom: 12,
+  },
+  sectionValue: {
+    fontFamily: "Orbit_400Regular",
+    fontSize: 16,
+    color: "#111",
+    lineHeight: 22,
+  },
   situationCard: {
     borderWidth: 1,
     borderColor: "#D8D8D0",
@@ -319,35 +335,32 @@ const styles = StyleSheet.create({
     color: "#111",
     opacity: 0.5,
   },
-  devResetBtn: {
+  changeBtn: {
     alignSelf: "center",
-    paddingVertical: 4,
-    paddingHorizontal: 10,
     borderWidth: 1,
     borderColor: "#CCC",
-    marginTop: 8,
+    borderRadius: 14,
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    marginTop: 4,
   },
-  devResetText: {
-    fontSize: 11,
+  changeBtnText: {
     fontFamily: "Orbit_400Regular",
-    color: "#999",
-  },
-  switchBtn: {
-    borderWidth: 1.5,
-    borderColor: "#111",
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: "center",
-    marginTop: 8,
-  },
-  switchBtnText: {
-    fontFamily: "Orbit_400Regular",
-    fontSize: 15,
-    fontWeight: "700",
+    fontSize: 12,
     color: "#111",
+    opacity: 0.7,
   },
-  btnDisabled: {
-    opacity: 0.4,
+  deleteBtn: {
+    alignSelf: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    marginTop: 12,
+  },
+  deleteBtnText: {
+    fontFamily: "Orbit_400Regular",
+    fontSize: 12,
+    color: "#E33",
+    opacity: 0.7,
   },
   bookingCard: {
     borderWidth: 1,

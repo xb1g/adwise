@@ -21,6 +21,7 @@ type Message = { role: "user" | "agent"; text: string };
 type Phase = "intro" | "conversation" | "reviewing" | "saving";
 
 type ExtractedProfile = {
+  name: string;
   age_range: string | null;
   life_areas: string[];
   bio: string;
@@ -29,12 +30,13 @@ type ExtractedProfile = {
 };
 
 export default function ElderVoiceOnboarding() {
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
   const scrollRef = useRef<ScrollView>(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const pulseRef = useRef<Animated.CompositeAnimation | null>(null);
   const messagesRef = useRef<Message[]>([]);
   const reviewEnteredRef = useRef(false);
+  const sessionStartedRef = useRef(false); // guard: only enterReview if session was actually started
 
   const [phase, setPhase] = useState<Phase>("intro");
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -43,15 +45,18 @@ export default function ElderVoiceOnboarding() {
   const [extractedProfile, setExtractedProfile] =
     useState<ExtractedProfile | null>(null);
   const [extractionFailed, setExtractionFailed] = useState(false);
+  const [noConversation, setNoConversation] = useState(false);
   const [devGenerating, setDevGenerating] = useState(false);
 
   const conversation = useConversation({
     clientTools: {
-      complete_onboarding: async (parameters: any): Promise<string> => {
-        try {
-          await conversation.endSession();
-        } catch (_) {}
-        await enterReview();
+      // Called by the AI agent when it decides the conversation is complete.
+      // Don't call endSession() here — the server closes the connection itself,
+      // which triggers onDisconnect → enterReview(). Calling endSession() from
+      // inside the tool handler races with the server close and can cause the
+      // audio deactivation error.
+      complete_onboarding: async (_parameters: any): Promise<string> => {
+        enterReview();
         return "done";
       },
     },
@@ -70,7 +75,8 @@ export default function ElderVoiceOnboarding() {
       setPaused(false);
     },
     onDisconnect: () => {
-      console.log("[elder-onboarding] disconnected");
+      console.log("[elder-onboarding] disconnected, messages:", messagesRef.current.length);
+      if (!sessionStartedRef.current) return; // ignore spurious disconnect before session starts
       enterReview();
     },
     onError: (message: string) =>
@@ -116,23 +122,39 @@ export default function ElderVoiceOnboarding() {
   }, [conversation]);
 
   async function handleStartSession() {
+    console.log("[setup] handleStartSession");
+    sessionStartedRef.current = true;
     setPhase("conversation");
     await conversation.startSession({ agentId: AGENT_ID });
   }
 
   async function enterReview() {
-    if (reviewEnteredRef.current) return;
+    if (reviewEnteredRef.current) {
+      console.log("[setup] enterReview: already entered, skipping");
+      return;
+    }
     reviewEnteredRef.current = true;
+    console.log(`[setup] enterReview: messages=${messagesRef.current.length}`);
     setPhase("reviewing");
+
+    if (messagesRef.current.length === 0) {
+      console.warn("[setup] enterReview: 0 messages — cannot extract");
+      setNoConversation(true);
+      setExtractionFailed(true);
+      return;
+    }
+
+    console.log("[setup] calling elder-onboarding-extract…");
     const { data, error } = await supabase.functions.invoke(
       "elder-onboarding-extract",
       { body: { messages: messagesRef.current } },
     );
     if (error || !data) {
+      console.error("[setup] extraction error:", error);
       setExtractionFailed(true);
-      setPhase("reviewing");
       return;
     }
+    console.log("[setup] extraction succeeded:", JSON.stringify(data).slice(0, 120));
     setExtractionFailed(false);
     setExtractedProfile(data as ExtractedProfile);
     // phase stays "reviewing" but now extractedProfile is set → shows review UI
@@ -140,6 +162,7 @@ export default function ElderVoiceOnboarding() {
 
   async function finishOnboarding(
     rawTranscript: typeof messages | null,
+    name: string,
     age_range: string | null,
     life_areas: string[],
     bio: string,
@@ -147,12 +170,14 @@ export default function ElderVoiceOnboarding() {
     wisdom_summary: string,
   ) {
     if (!user) return;
+    console.log("[setup] finishOnboarding — saving profile for user", user.id);
     setPhase("saving");
     try {
       const { error } = await supabase.from("elder_profiles").upsert(
         {
           user_id: user.id,
           raw_transcript: rawTranscript,
+          name: name ?? "",
           age_range: age_range ?? null,
           life_areas: life_areas ?? [],
           bio: bio ?? "",
@@ -163,17 +188,35 @@ export default function ElderVoiceOnboarding() {
         },
         { onConflict: "user_id" },
       );
-      if (!error) router.replace("/(elder)/home");
-      else setPhase("reviewing");
-    } catch {
+      if (error) {
+        console.error("[setup] upsert error:", error);
+        setPhase("reviewing");
+      } else {
+        console.log("[setup] profile saved, navigating to /(elder)/home");
+        router.replace("/(elder)/home");
+      }
+    } catch (err) {
+      console.error("[setup] finishOnboarding threw:", err);
       setPhase("reviewing");
     }
   }
 
   async function handleDone() {
+    console.log(`[setup] handleDone — messages=${messagesRef.current.length} reviewEntered=${reviewEnteredRef.current}`);
     try {
       await conversation.endSession();
-    } catch (_) {}
+    } catch (err) {
+      console.warn("[setup] endSession error (ok if already closed):", err);
+    }
+    // If a spurious early disconnect already set the guard but left us with 0
+    // messages (and failed extraction), reset so the user's explicit "Done"
+    // triggers a fresh extraction with whatever has been captured so far.
+    if (reviewEnteredRef.current && messagesRef.current.length > 0) {
+      console.log("[setup] handleDone: resetting guard for re-extraction");
+      reviewEnteredRef.current = false;
+      setExtractionFailed(false);
+      setNoConversation(false);
+    }
     await enterReview();
   }
 
@@ -181,6 +224,7 @@ export default function ElderVoiceOnboarding() {
     if (!extractedProfile) return;
     await finishOnboarding(
       messages,
+      extractedProfile.name,
       extractedProfile.age_range,
       extractedProfile.life_areas,
       extractedProfile.bio,
@@ -192,21 +236,34 @@ export default function ElderVoiceOnboarding() {
   async function handleStartOver() {
     setExtractedProfile(null);
     setExtractionFailed(false);
+    setNoConversation(false);
     setMessages([]);
+    messagesRef.current = [];
     setPaused(false);
+    sessionStartedRef.current = false;
+    reviewEnteredRef.current = false;
     setPhase("intro");
   }
 
   async function handleDevGenerate() {
+    console.log("[setup] dev generate — phase:", phase);
     setDevGenerating(true);
+    // End any active session first (safe to call even if not connected)
+    try { await conversation.endSession(); } catch (_) {}
+    // Don't let onDisconnect trigger enterReview during a dev generate
+    reviewEnteredRef.current = true;
     try {
       const { data, error } = await supabase.functions.invoke("dev-generate-elder", {});
-      if (error || !data) throw new Error("generation failed");
+      if (error || !data) throw new Error(`generation failed: ${error?.message}`);
+      console.log("[setup] dev generate succeeded, jumping to review");
       // Populate fake messages so the review looks realistic
       messagesRef.current = data.fake_messages ?? [];
       setMessages(data.fake_messages ?? []);
+      setExtractionFailed(false);
+      setNoConversation(false);
       // Jump straight to review with the generated profile
       setExtractedProfile({
+        name: data.name ?? "",
         age_range: data.age_range,
         life_areas: data.life_areas,
         bio: data.bio,
@@ -214,8 +271,10 @@ export default function ElderVoiceOnboarding() {
         wisdom_summary: data.wisdom_summary,
       });
       setPhase("reviewing");
-    } catch {
-      // silently fail - just leave on intro
+    } catch (err) {
+      console.error("[setup] dev generate failed:", err);
+      // Reset so onDisconnect can still work if needed
+      reviewEnteredRef.current = false;
     } finally {
       setDevGenerating(false);
     }
@@ -245,15 +304,22 @@ export default function ElderVoiceOnboarding() {
     if (phase === "reviewing") {
       setExtractedProfile(null);
       setExtractionFailed(false);
+      setNoConversation(false);
       setMessages([]);
       messagesRef.current = [];
       setPaused(false);
       setPhase("intro");
-    } else {
+    } else if (phase === "conversation") {
+      // stop conversation, return to intro
       setMessages([]);
       messagesRef.current = [];
+      sessionStartedRef.current = false;
+      reviewEnteredRef.current = false;
       setPaused(false);
-      router.replace({ pathname: "/", params: { noredirect: "1" } });
+      setPhase("intro");
+    } else {
+      // intro phase: sign out so _layout stops redirecting here
+      await signOut();
     }
   }
 
@@ -337,15 +403,22 @@ export default function ElderVoiceOnboarding() {
           <View style={styles.reviewLoadingContainer}>
             {extractionFailed ? (
               <>
-                <Text style={styles.reviewLoadingText}>Couldn't extract your profile.</Text>
+                <Text style={styles.reviewLoadingText}>
+                  {noConversation
+                    ? "No conversation was recorded."
+                    : "Couldn't extract your profile."}
+                </Text>
                 <Text style={[styles.reviewLoadingText, { fontSize: 14, opacity: 0.6 }]}>
-                  Check your connection and try again.
+                  {noConversation
+                    ? "The connection dropped before anything was captured."
+                    : "Check your connection and try again."}
                 </Text>
                 <Pressable
                   style={[styles.doneBtn, { marginTop: 24 }]}
                   onPress={() => {
                     reviewEnteredRef.current = false;
                     setExtractionFailed(false);
+                    setNoConversation(false);
                     enterReview();
                   }}
                 >
@@ -353,6 +426,14 @@ export default function ElderVoiceOnboarding() {
                 </Pressable>
                 <Pressable style={[styles.repeatBtn, { marginTop: 12 }]} onPress={handleStartOver}>
                   <Text style={styles.repeatBtnText}>Start Over</Text>
+                </Pressable>
+                <Pressable
+                  style={{ marginTop: 20, alignItems: "center" }}
+                  onPress={async () => { await signOut(); }}
+                >
+                  <Text style={{ fontFamily: "Orbit_400Regular", fontSize: 14, color: "#999" }}>
+                    Sign out
+                  </Text>
                 </Pressable>
               </>
             ) : (
@@ -372,6 +453,13 @@ export default function ElderVoiceOnboarding() {
             showsVerticalScrollIndicator={false}
           >
             <Text style={styles.reviewTitle}>Here's what we captured</Text>
+
+            {extractedProfile.name ? (
+              <View style={styles.reviewSection}>
+                <Text style={styles.reviewLabel}>Name</Text>
+                <Text style={styles.reviewValue}>{extractedProfile.name}</Text>
+              </View>
+            ) : null}
 
             {extractedProfile.bio ? (
               <View style={styles.reviewSection}>
@@ -541,6 +629,15 @@ export default function ElderVoiceOnboarding() {
         </Pressable>
         <Pressable style={styles.doneBtn} onPress={handleDone}>
           <Text style={styles.doneBtnText}>I'm Done</Text>
+        </Pressable>
+        <Pressable
+          style={[styles.devBtn, devGenerating && { opacity: 0.5 }, { alignSelf: "center" }]}
+          onPress={handleDevGenerate}
+          disabled={devGenerating}
+        >
+          <Text style={styles.devBtnText}>
+            {devGenerating ? "generating..." : "dev: generate profile"}
+          </Text>
         </Pressable>
       </View>
     </SafeAreaView>

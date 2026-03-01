@@ -7,31 +7,24 @@ import { supabase } from "../../lib/supabase";
 
 type ElderProfile = {
   id: string;
+  name: string;
   age_range: string | null;
   life_areas: string[];
   bio: string;
 };
 
-type WisdomUser = {
-  name: string | null;
-};
-
 export default function ElderHome() {
   const { user } = useAuth();
   const [profile, setProfile] = useState<ElderProfile | null>(null);
-  const [wisdomUser, setWisdomUser] = useState<WisdomUser | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!user) return;
-    Promise.all([
-      supabase.from("elder_profiles").select("id, age_range, life_areas, bio").eq("user_id", user.id).maybeSingle(),
-      supabase.from("wisdom_users").select("name").eq("user_id", user.id).maybeSingle(),
-    ]).then(([{ data: ep }, { data: wu }]) => {
-      setProfile(ep);
-      setWisdomUser(wu);
-      setLoading(false);
-    });
+    supabase.from("elder_profiles").select("id, name, age_range, life_areas, bio").eq("user_id", user.id).maybeSingle()
+      .then(({ data: ep }) => {
+        setProfile(ep);
+        setLoading(false);
+      });
   }, [user]);
 
   if (loading) {
@@ -42,7 +35,7 @@ export default function ElderHome() {
     );
   }
 
-  const firstName = wisdomUser?.name?.split(" ")[0] ?? "Elder";
+  const firstName = profile?.name?.split(" ")[0] || "Elder";
 
   async function handleLogout() {
     Alert.alert("Log out", "Are you sure you want to log out?", [

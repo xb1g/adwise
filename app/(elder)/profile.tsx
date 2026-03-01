@@ -1,38 +1,110 @@
 import { useEffect, useState } from "react";
-import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator } from "react-native";
+import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator, Alert, TextInput } from "react-native";
 import { router } from "expo-router";
 import { useAuth } from "../../lib/auth";
 import { supabase } from "../../lib/supabase";
 
 type ElderProfile = {
   id: string;
+  name: string;
   age_range: string | null;
   life_areas: string[];
   bio: string;
 };
 
 export default function ElderProfile() {
-  const { user, refreshProfile } = useAuth();
+  const { user, refreshRole, signOut } = useAuth();
   const [profile, setProfile] = useState<ElderProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editedName, setEditedName] = useState("");
+  const [savingName, setSavingName] = useState(false);
 
   useEffect(() => {
     if (!user) return;
     supabase
       .from("elder_profiles")
-      .select("id, age_range, life_areas, bio")
+      .select("id, name, age_range, life_areas, bio")
       .eq("user_id", user.id)
       .maybeSingle()
-      .then(({ data }) => { setProfile(data); setLoading(false); });
+      .then(({ data }) => {
+        setProfile(data);
+        setEditedName(data?.name ?? "");
+        setLoading(false);
+      });
   }, [user]);
 
-  async function handleDevReset() {
+  function resetEditedName() {
+    setEditedName(profile?.name ?? "");
+    setIsEditingName(false);
+  }
+
+  async function handleSaveName() {
+    if (!user || !profile) return;
+    const trimmedName = editedName.trim();
+    if (!trimmedName) {
+      Alert.alert("Name required", "Please enter a name.");
+      return;
+    }
+
+    setSavingName(true);
+    try {
+      const { error } = await supabase
+        .from("elder_profiles")
+        .update({ name: trimmedName })
+        .eq("id", profile.id);
+
+      if (error) {
+        throw error;
+      }
+
+      setProfile((current) => (current ? { ...current, name: trimmedName } : current));
+      setIsEditingName(false);
+      Alert.alert("Saved", "Your name was updated.");
+    } catch (err) {
+      console.error("[profile] save name error:", err);
+      Alert.alert("Error", "Couldn't save your name. Try again.");
+    } finally {
+      setSavingName(false);
+    }
+  }
+
+  async function handleSignOut() {
+    await signOut();
+    router.replace("/");
+  }
+
+  async function handleChangeChoice() {
     if (!user) return;
-    const r1 = await supabase.from("user_profiles").delete().eq("user_id", user.id);
-    const r2 = await supabase.from("wisdom_users").delete().eq("user_id", user.id);
-    const r3 = await supabase.from("elder_profiles").delete().eq("user_id", user.id);
-    console.log("[reset] user_profiles:", r1.error, "wisdom_users:", r2.error, "elder_profiles:", r3.error);
-    await refreshProfile();
+    await supabase
+      .from("wisdom_users")
+      .upsert({ user_id: user.id, role: null }, { onConflict: "user_id" });
+    await refreshRole();
+    router.replace("/");
+  }
+
+  async function handleDeleteAccount() {
+    Alert.alert(
+      "Delete Account",
+      "This will permanently delete your account and all data. This cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            const { error } = await supabase.functions.invoke("delete-account");
+            if (error) {
+              console.error("[profile] delete account error:", error);
+              Alert.alert("Error", "Failed to delete account. Try again.");
+              return;
+            }
+            await signOut();
+            router.replace("/");
+          },
+        },
+      ]
+    );
   }
 
   if (loading) {
@@ -51,6 +123,52 @@ export default function ElderProfile() {
       </Pressable>
 
       <Text style={styles.title}>My Profile</Text>
+
+      <View style={styles.section}>
+        <Text style={styles.label}>Name</Text>
+        {isEditingName ? (
+          <View>
+            <TextInput
+              style={[styles.nameInput, savingName && styles.nameInputDisabled]}
+              value={editedName}
+              onChangeText={setEditedName}
+              placeholder="Enter your name"
+              placeholderTextColor="#888"
+              autoCapitalize="words"
+            />
+            <View style={styles.nameActions}>
+              <Pressable
+                style={[styles.saveBtn, (savingName || !editedName.trim()) && styles.btnDisabled]}
+                onPress={handleSaveName}
+                disabled={savingName || !editedName.trim()}
+              >
+                {savingName ? (
+                  <ActivityIndicator color="#111" />
+                ) : (
+                  <Text style={styles.saveBtnText}>Save</Text>
+                )}
+              </Pressable>
+              <Pressable style={styles.cancelBtn} onPress={resetEditedName} disabled={savingName}>
+                <Text style={styles.cancelBtnText}>Cancel</Text>
+              </Pressable>
+            </View>
+          </View>
+        ) : (
+          <View style={styles.nameRow}>
+            {profile.name ? <Text style={styles.value}>{profile.name}</Text> : <Text style={styles.emptyText}>No name set</Text>}
+            <Pressable onPress={() => setIsEditingName(true)} hitSlop={8}>
+              <Text style={styles.editLink}>Edit</Text>
+            </Pressable>
+          </View>
+        )}
+      </View>
+
+      {user?.email ? (
+        <View style={styles.section}>
+          <Text style={styles.label}>Email</Text>
+          <Text style={styles.value}>{user.email}</Text>
+        </View>
+      ) : null}
 
       {profile.age_range ? (
         <View style={styles.section}>
@@ -85,8 +203,16 @@ export default function ElderProfile() {
         </Text>
       )}
 
-      <Pressable style={styles.devResetBtn} onPress={handleDevReset}>
-        <Text style={styles.devResetText}>reset (dev)</Text>
+      <Pressable style={styles.signOutBtn} onPress={handleSignOut}>
+        <Text style={styles.signOutText}>Sign out</Text>
+      </Pressable>
+
+      <Pressable style={styles.changeBtn} onPress={handleChangeChoice}>
+        <Text style={styles.changeBtnText}>Change your choice</Text>
+      </Pressable>
+
+      <Pressable style={styles.deleteBtn} onPress={handleDeleteAccount}>
+        <Text style={styles.deleteBtnText}>Delete account (dev)</Text>
       </Pressable>
     </ScrollView>
   );
@@ -105,6 +231,41 @@ const styles = StyleSheet.create({
   section: { gap: 10 },
   label: { fontFamily: "Orbit_400Regular", fontSize: 14, color: "#111", fontWeight: "900", letterSpacing: 2, textTransform: "uppercase" },
   value: { fontFamily: "Orbit_400Regular", fontSize: 28, color: "#111", fontWeight: "900" },
+  nameRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
+  editLink: { fontFamily: "Orbit_400Regular", fontSize: 13, color: "#555", textDecorationLine: "underline" },
+  emptyText: { fontFamily: "Orbit_400Regular", fontSize: 28, color: "#999", fontWeight: "900" },
+  nameInput: {
+    borderWidth: 2,
+    borderColor: "#111",
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    fontFamily: "Orbit_400Regular",
+    fontSize: 24,
+    color: "#111",
+    fontWeight: "900",
+    backgroundColor: "#FFF",
+  },
+  nameInputDisabled: { opacity: 0.6 },
+  nameActions: { marginTop: 12, flexDirection: "row", gap: 10 },
+  saveBtn: {
+    borderWidth: 2,
+    borderColor: "#111",
+    backgroundColor: "#BFFF00",
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    alignItems: "center",
+  },
+  saveBtnText: { fontFamily: "Orbit_400Regular", fontSize: 14, color: "#111", fontWeight: "700" },
+  cancelBtn: {
+    borderWidth: 1.5,
+    borderColor: "#111",
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cancelBtnText: { fontFamily: "Orbit_400Regular", fontSize: 14, color: "#666" },
+  btnDisabled: { opacity: 0.5 },
 
   bioCard: { backgroundColor: "#F0F2E8", padding: 24, gap: 10, borderWidth: 2, borderColor: "#111" },
   bio: { fontFamily: "Orbit_400Regular", fontSize: 20, color: "#111", fontWeight: "900", lineHeight: 32 },
@@ -115,6 +276,40 @@ const styles = StyleSheet.create({
 
   emptyHint: { fontFamily: "Orbit_400Regular", fontSize: 20, color: "#111", fontWeight: "900", lineHeight: 32 },
 
-  devResetBtn: { marginTop: 16, alignSelf: "flex-start", paddingVertical: 4, paddingHorizontal: 10, borderWidth: 1, borderColor: "#CCC" },
-  devResetText: { fontSize: 11, fontFamily: "Orbit_400Regular", color: "#999" },
+  signOutBtn: {
+    borderWidth: 1.5,
+    borderColor: "#111",
+    paddingVertical: 14,
+    alignItems: "center",
+    marginTop: 8,
+  },
+  signOutText: {
+    fontFamily: "Orbit_400Regular",
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#111",
+  },
+  changeBtn: {
+    borderWidth: 1,
+    borderColor: "#CCC",
+    paddingVertical: 10,
+    alignItems: "center",
+    marginTop: 8,
+  },
+  changeBtnText: {
+    fontFamily: "Orbit_400Regular",
+    fontSize: 13,
+    color: "#555",
+  },
+  deleteBtn: {
+    alignItems: "center",
+    paddingVertical: 10,
+    marginTop: 12,
+  },
+  deleteBtnText: {
+    fontFamily: "Orbit_400Regular",
+    fontSize: 12,
+    color: "#E33",
+    opacity: 0.7,
+  },
 });

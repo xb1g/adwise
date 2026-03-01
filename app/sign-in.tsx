@@ -10,29 +10,21 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { router, useLocalSearchParams } from "expo-router";
 import { useAuth } from "../lib/auth";
-import { supabase } from "../lib/supabase";
 
 export default function SignIn() {
   const { role } = useLocalSearchParams<{ role: "elder" | "seeker" }>();
-  const { signInWithGoogle, refreshRole } = useAuth();
+  const { signInWithGoogle, setPendingRole } = useAuth();
   const [loading, setLoading] = useState(false);
 
   const handleGoogle = async () => {
     setLoading(true);
     try {
+      if (role) await setPendingRole(role);
       await signInWithGoogle();
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (session?.user?.id && role) {
-        await supabase
-          .from("wisdom_users")
-          .upsert({ user_id: session.user.id, role }, { onConflict: "user_id" });
-        await refreshRole();
-      }
-      // _layout.tsx handles navigation once role + onboarding state are set
+      // onAuthStateChange in auth.tsx will pick up the pending role,
+      // upsert wisdom_users, and _layout.tsx handles navigation
     } catch (e) {
-      console.error("Google sign-in failed:", e);
+      console.error("Sign-in failed:", e);
     } finally {
       setLoading(false);
     }
